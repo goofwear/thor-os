@@ -1,11 +1,17 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include "drivers/rtl8139.hpp"
+
+#include "conc/mutex.hpp"
+#include "conc/int_lock.hpp"
+#include "conc/int_lock.hpp"
+
+#include "net/ethernet_layer.hpp"
 
 #include "logging.hpp"
 #include "kernel_utils.hpp"
@@ -13,11 +19,6 @@
 #include "virtual_allocator.hpp"
 #include "interrupts.hpp"
 #include "paging.hpp"
-#include "semaphore.hpp"
-#include "paging.hpp"
-#include "int_lock.hpp"
-
-#include "net/ethernet_layer.hpp"
 
 #define MAC0 0x00
 #define MAC4 0x04
@@ -83,7 +84,9 @@ struct rtl8139_t {
     volatile uint64_t dirty_tx; //Index inside the transmit buffer
 
     tx_desc_t tx_desc[tx_buffers];
-    semaphore tx_sem;
+
+    mutex tx_lock;
+    deferred_unique_semaphore tx_sem;
 
     network::interface_descriptor* interface;
 };
@@ -128,12 +131,8 @@ void packet_handler(interrupt::syscall_regs*, void* data){
 
                 std::copy_n(packet_payload, packet_only_length, packet_buffer);
 
-                network::ethernet::packet packet(packet_buffer, packet_only_length);
-
-                direct_int_lock lock;
-
-                interface.rx_queue.push(packet);
-                interface.rx_sem.release();
+                interface.rx_queue.emplace(std::make_shared<network::packet>(packet_buffer, packet_only_length));
+                interface.rx_sem.notify();
             }
 
             cur_rx = (cur_rx + packet_length + 4 + 3) & ~3; //align on 4 bytes
@@ -143,7 +142,9 @@ void packet_handler(interrupt::syscall_regs*, void* data){
         }
 
         desc.cur_rx = cur_rx;
-    } else if(status & (TX_OK | TX_ERR)){
+    }
+
+    if(status & (TX_OK | TX_ERR)){
         auto& dirty_tx = desc.dirty_tx;
         size_t cleaned_up = 0;
 
@@ -173,32 +174,55 @@ void packet_handler(interrupt::syscall_regs*, void* data){
             ++dirty_tx;
         }
 
-        desc.tx_sem.release(cleaned_up);
-    } else {
+        desc.tx_sem.notify(cleaned_up);
+    }
+
+    if(!(status & (RX_OK | TX_OK | TX_ERR))){
         // This should not happen since we only enable a few
         // interrupts
         logging::logf(logging::log_level::ERROR, "rtl8139: Receive status unhandled OK\n");
     }
 }
 
-void send_packet(const network::interface_descriptor& interface, network::ethernet::packet& packet){
-    logging::logf(logging::log_level::TRACE, "rtl8139: Start transmitting packet\n");
+void send_packet(network::interface_descriptor& interface, network::packet_p& packet){
+    logging::logf(logging::log_level::TRACE, "rtl8139: Start transmitting packet (%p)\n", packet.get());
+
+    auto* ether_header = reinterpret_cast<network::ethernet::header*>(packet->payload);
+
+    // Shortcut packet to self directly to the rx queue
+    if(network::ethernet::mac6_to_mac64(ether_header->target.mac) == interface.mac_address){
+        {
+            direct_int_lock lock;
+
+            interface.rx_queue.push(packet);
+            interface.rx_sem.notify();
+        }
+
+        logging::logf(logging::log_level::TRACE, "rtl8139: Packet to self transmitted correctly\n");
+
+        return;
+    }
 
     auto& desc = *reinterpret_cast<rtl8139_t*>(interface.driver_data);
     auto iobase = desc.iobase;
 
+    desc.tx_lock.lock();
+
     // Wait for a free entry in the tx buffers
-    desc.tx_sem.acquire();
+    desc.tx_sem.claim();
+    desc.tx_sem.wait();
 
     // Claim an entry in the tx buffers
-    auto entry = __sync_fetch_and_add(&desc.cur_tx, 1) % tx_buffers;
+    auto entry = desc.cur_tx++ % tx_buffers;
+
+    desc.tx_lock.unlock();
 
     auto& tx_desc = desc.tx_desc[entry];
 
-    std::copy_n(packet.payload, packet.payload_size, reinterpret_cast<char*>(tx_desc.buffer_virt));
+    std::copy_n(packet->payload, packet->payload_size, reinterpret_cast<char*>(tx_desc.buffer_virt));
 
     out_dword(iobase + TX_ADDR + entry * 4, tx_desc.buffer_phys);
-    out_dword(iobase + TX_STATUS + entry * 4, uint32_t(256) << 16 | packet.payload_size);
+    out_dword(iobase + TX_STATUS + entry * 4, uint32_t(256) << 16 | packet->payload_size);
 }
 
 } //end of anonymous namespace
@@ -207,7 +231,6 @@ void rtl8139::init_driver(network::interface_descriptor& interface, pci::device_
     logging::logf(logging::log_level::TRACE, "rtl8139: Initialize RTL8139 driver on pci:%u:%u:%u\n", uint64_t(pci_device.bus), uint64_t(pci_device.device), uint64_t(pci_device.function));
 
     rtl8139_t* desc = new rtl8139_t();
-    desc->interface = &interface;
 
     interface.driver_data = desc;
     interface.hw_send = send_packet;
@@ -304,4 +327,9 @@ void rtl8139::init_driver(network::interface_descriptor& interface, pci::device_
     interface.mac_address = mac;
 
     logging::logf(logging::log_level::TRACE, "rtl8139: MAC Address %h \n", mac);
+}
+
+void rtl8139::finalize_driver(network::interface_descriptor& interface){
+    auto* desc = static_cast<rtl8139_t*>(interface.driver_data);
+    desc->interface = &interface;
 }

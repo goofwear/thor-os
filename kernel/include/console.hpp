@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef CONSOLE_H
@@ -14,45 +14,72 @@
 #include <enable_if.hpp>
 #include <string.hpp>
 
+namespace stdio {
+
+/*!
+ * \brief Init the console
+ */
 void init_console();
 
-size_t get_columns();
-size_t get_rows();
+/*!
+ * \brief A console
+ */
+struct console {
+    /*!
+     * \brief Init the console
+     */
+    void init();
 
-void set_column(size_t column);
-size_t get_column();
+    /*!
+     * \brief Returns the number of columns of the console
+     */
+    size_t get_columns() const;
 
-void set_line(size_t line);
-size_t get_line();
+    /*!
+     * \brief Returns the number of rows of the console
+     */
+    size_t get_rows() const;
 
-void wipeout();
-void k_print(char key);
-void k_print(const char* string);
-void k_print(const char* string, uint64_t end);
+    /*!
+     * \brief Print the given char to the console
+     * \param c The character to print
+     */
+    void print(char c);
 
-void k_print(const std::string& s);
+    /*!
+     * \brief Clear the console
+     */
+    void wipeout();
 
-void k_print(uint8_t number);
-void k_print(uint16_t number);
-void k_print(uint32_t number);
-void k_print(uint64_t number);
+    /*!
+     * \brief Set the active status of the console
+     * \param active The active status of the console
+     */
+    void set_active(bool active);
 
-void k_print(int8_t number);
-void k_print(int16_t number);
-void k_print(int32_t number);
-void k_print(int64_t number);
+    /*!
+     * \brief Save the state of the console
+     */
+    void save();
 
-template<typename... Arguments>
-typename std::enable_if_t<(sizeof...(Arguments) == 0)> k_print_line(const Arguments&... args){
-    k_print('\n');
-}
+    /*!
+     * \brief Restore the state of the console
+     */
+    void restore();
 
-template<typename... Arguments>
-typename std::enable_if_t<(sizeof...(Arguments) > 0)> k_print_line(const Arguments&... args){
-    k_print(args...);
-    k_print('\n');
-}
+private:
+    /*!
+     * \brief Move to the next line
+     */
+    void next_line();
 
-#include "printf_dec.hpp"
+    size_t current_line   = 0; ///< The current line of the console
+    size_t current_column = 0; ///< The current column of the console
+
+    void* buffer = nullptr; ///< The buffer to save the state
+    bool active  = false;   ///< The active status of the console
+};
+
+} // end of namespace stdio
 
 #endif

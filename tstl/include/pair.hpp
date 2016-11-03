@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef PAIR_H
@@ -10,14 +10,17 @@
 
 namespace std {
 
+/*!
+ * \brief Simply container to hold a pair of element
+ */
 template<typename T1, typename T2>
 class pair {
 public:
-    typedef T1 first_type;
-    typedef T2 second_type;
+    using first_type = T1;  ///< The type of the first element
+    using second_type = T2; ///< The type of the second element
 
-    first_type first;
-    second_type second;
+    first_type first;   ///< The first element
+    second_type second; ///< The second element
 
     //Constructor
 
@@ -63,6 +66,9 @@ public:
     }
 };
 
+/*!
+ * \brief Helper to construct a pair
+ */
 template<typename T1, typename T2>
 inline constexpr pair<T1, T2> make_pair(T1&& x, T2&& y){
     return pair<T1, T2>(std::forward<T1>(x), std::forward<T2>(y));

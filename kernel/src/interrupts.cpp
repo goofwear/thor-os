@@ -1,14 +1,14 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <types.hpp>
 
 #include "interrupts.hpp"
-#include "console.hpp"
+#include "print.hpp"
 #include "kernel_utils.hpp"
 #include "gdt.hpp"
 #include "scheduler.hpp"
@@ -228,25 +228,38 @@ const char* exceptions_title[32] {
 
 extern "C" {
 
-#define double_printf(...) \
-    logging::logf(logging::log_level::ERROR, __VA_ARGS__); \
-    printf(__VA_ARGS__);
-
-
+#define fault_printf(...) \
+    logging::logf(logging::log_level::ERROR, __VA_ARGS__);
 
 void _fault_handler(interrupt::fault_regs regs){
-    double_printf("Exception %u (%s) occured\n", regs.error_no, exceptions_title[regs.error_no]);
-    double_printf("error_code=%u\n", regs.error_code);
-    double_printf("rip=%h\n", regs.rip);
-    double_printf("rflags=%h\n", regs.rflags);
-    double_printf("cs=%h\n", regs.cs);
-    double_printf("rsp=%h\n", regs.rsp);
-    double_printf("ss=%h\n", regs.ss);
-    double_printf("pid=%u\n", scheduler::get_pid());
-    double_printf("cr2=%h\n", get_cr2());
-    double_printf("cr3=%h\n", get_cr3());
+    fault_printf("Exception %u (%s) occured\n", regs.error_no, exceptions_title[regs.error_no]);
+    fault_printf("error_code=%u\n", regs.error_code);
+    fault_printf("rip=%h\n", regs.rip);
+    fault_printf("rflags=%h\n", regs.rflags);
+    fault_printf("cs=%h\n", regs.cs);
+    fault_printf("rbp=%h\n", regs.rbp);
+    fault_printf("rsp=%h\n", regs.rsp);
+    fault_printf("ss=%h\n", regs.ss);
+    fault_printf("pid=%u\n", scheduler::get_pid());
+    fault_printf("cr2=%h\n", get_cr2());
+    fault_printf("cr3=%h\n", get_cr3());
+
+#ifdef THOR_STACK
+    fault_printf("Call stack\n");
+    size_t i = 0;
+    auto rbp = regs.rbp;
+    while(rbp){
+        auto ip = *reinterpret_cast<size_t*>(rbp + 8);
+        fault_printf("%u: %h\n", i++, ip);
+        rbp = *reinterpret_cast<size_t*>(rbp);
+    }
+#endif
+
+    // TODO Should also print the message to the terminal of the process
+    // (cannot use printf because of string manipulation)
 
     if(scheduler::is_started()){
+        // TODO Should also send a signal to the process (if user)
         scheduler::fault();
     } else {
         asm volatile ("cli; hlt;");

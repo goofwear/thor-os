@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef LOCK_GUARD_HPP
@@ -15,7 +15,7 @@ struct lock_guard {
     Lock& lock;
 
     explicit lock_guard(Lock& l) : lock(l) {
-        lock.acquire();
+        lock.lock();
     }
 
     lock_guard(const lock_guard&) = delete;
@@ -25,7 +25,7 @@ struct lock_guard {
     lock_guard& operator=(const lock_guard&&) = delete;
 
     ~lock_guard(){
-        lock.release();
+        lock.unlock();
     }
 };
 

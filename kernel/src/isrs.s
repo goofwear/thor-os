@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT_1_0.txt)
 //=======================================================================
 
 .intel_syntax noprefix
@@ -13,6 +13,7 @@
 .global _isr\number
 _isr\number:
     push \number
+    push rbp
 
     jmp isr_common_handler
 .endm
@@ -24,6 +25,7 @@ _isr\number:
 
     push 0 // Dummy error code
     push \number
+    push rbp
 
     jmp isr_common_handler
 .endm
@@ -69,6 +71,6 @@ isr_common_handler:
     // TODO At this point, it is absolutely not safe to return since most
     // registers will get trashed the fault handler must hang
 
-    add rsp, 8 // Cleans the pushed error number
+    add rsp, 16 // Cleans the pushed base pointer and error number
 
     iretq // iret will clean the other automatically pushed stuff

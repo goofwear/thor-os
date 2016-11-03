@@ -1,27 +1,27 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef TYPES_H
 #define TYPES_H
 
-typedef unsigned int uint8_t __attribute__((__mode__(__QI__)));
-typedef unsigned int uint16_t __attribute__ ((__mode__ (__HI__)));
-typedef unsigned int uint32_t __attribute__ ((__mode__ (__SI__)));
-typedef unsigned int uint64_t __attribute__ ((__mode__ (__DI__)));
+typedef unsigned int uint8_t __attribute__((__mode__(__QI__))); ///< An unsigned 8-bit number
+typedef unsigned int uint16_t __attribute__ ((__mode__ (__HI__))); ///< An unsigned 16-bit number
+typedef unsigned int uint32_t __attribute__ ((__mode__ (__SI__))); ///< An unsigned 32-bit number
+typedef unsigned int uint64_t __attribute__ ((__mode__ (__DI__))); ///< An unsigned 64-bit number
 
-typedef int int8_t __attribute__((__mode__(__QI__)));
-typedef int int16_t __attribute__ ((__mode__ (__HI__)));
-typedef int int32_t __attribute__ ((__mode__ (__SI__)));
-typedef int int64_t __attribute__ ((__mode__ (__DI__)));
+typedef int int8_t __attribute__((__mode__(__QI__))); ///< A signed 8-bit number
+typedef int int16_t __attribute__ ((__mode__ (__HI__))); ///< A signed 16-bit number
+typedef int int32_t __attribute__ ((__mode__ (__SI__))); ///< A signed 32-bit number
+typedef int int64_t __attribute__ ((__mode__ (__DI__))); ///< A signed 64-bit number
 
-typedef uint64_t uintptr_t;
-typedef uint64_t size_t;
+typedef uint64_t uintptr_t; ///< Type that can be used to store a pointer value
+typedef uint64_t size_t; ///< Type that can be used to store the size of a collectiotn
 
-typedef double sse_128 __attribute__((vector_size(16)));
+typedef double sse_128 __attribute__((vector_size(16))); ///< SSE 128-bit value
 
 static_assert(sizeof(uint8_t) == 1, "uint8_t must be 1 byte long");
 static_assert(sizeof(uint16_t) == 2, "uint16_t must be 2 bytes long");

@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef ALGORITHMS_H
@@ -169,7 +169,7 @@ void fill(ForwardIterator first, ForwardIterator last, const T& value){
  * \param count The number of elements
  * \param value The value to write
  */
-template<typename ForwardIterator, typename T, std::enable_if_t<!std::has_trivial_assign<typename std::iterator_traits<ForwardIterator>::value_type>::value, int> = 42>
+template<typename ForwardIterator, typename T, std::enable_if_t<!(std::is_integral<typename std::iterator_traits<ForwardIterator>::value_type>::value && is_integral<T>::value), int> = 42>
 void fill_n(ForwardIterator first, size_t count, const T& value){
     if(count > 0){
         *first = value;
@@ -187,7 +187,7 @@ void fill_n(ForwardIterator first, size_t count, const T& value){
  * \param count The number of elements
  * \param value The value to write
  */
-template<typename ForwardIterator, typename T, std::enable_if_t<std::has_trivial_assign<typename std::iterator_traits<ForwardIterator>::value_type>::value, int> = 42>
+template<typename ForwardIterator, typename T, std::enable_if_t<std::is_integral<typename std::iterator_traits<ForwardIterator>::value_type>::value && is_integral<T>::value, int> = 42>
 void fill_n(ForwardIterator first, size_t count, const T& value){
     if(!value){
         memclr(reinterpret_cast<char*>(first), count * sizeof(decltype(*first)));
@@ -221,6 +221,78 @@ size_t compare_n(Iterator1 it1, Iterator2 it2, size_t count){
 template<typename Iterator1, typename Iterator2>
 bool equal_n(Iterator1 it1, Iterator2 it2, size_t n){
     return compare_n(it1, it2, n) == 0;
+}
+
+template<typename Iterator, typename Functor>
+void for_each(Iterator it, Iterator end, Functor func){
+    while(it != end){
+        func(*it);
+
+        ++it;
+    }
+}
+
+template<typename Iterator, typename T>
+T accumulate(Iterator it, Iterator end, T init){
+    while(it != end){
+        init = init + *it;
+
+        ++it;
+    }
+
+    return init;
+}
+
+template<typename Iterator, typename T>
+Iterator find(Iterator first, Iterator last, const T& value){
+    for (; first != last; ++first) {
+        if (*first == value) {
+            return first;
+        }
+    }
+
+    return last;
+}
+
+template <typename Iterator, typename Pred>
+Iterator find_if(Iterator first, Iterator last, Pred pred) {
+    for (; first != last; ++first) {
+        if (pred(*first)) {
+            return first;
+        }
+    }
+
+    return last;
+}
+
+template< typename Iterator, typename T >
+Iterator remove(Iterator first, Iterator last, const T& value){
+    first = std::find(first, last, value);
+
+    if (first != last){
+        for(auto it = first; ++it != last; ){
+            if (!(*it == value)){
+                *first++ = std::move(*it);
+            }
+        }
+    }
+
+    return first;
+}
+
+template <typename Iterator, typename Pred>
+Iterator remove_if(Iterator first, Iterator last, Pred pred) {
+    first = std::find_if(first, last, pred);
+
+    if (first != last) {
+        for (auto it = first; ++it != last;) {
+            if (!pred(*it)) {
+                *first++ = std::move(*it);
+            }
+        }
+    }
+
+    return first;
 }
 
 template<typename T>

@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <tlib/file.hpp>
@@ -11,12 +11,12 @@
 #include <tlib/print.hpp>
 
 int main(int, char*[]){
-    auto fd = open("/sys/uptime");
+    auto fd = tlib::open("/sys/uptime");
 
     if(fd.valid()){
         auto buffer = new char[64];
 
-        auto content_result = read(*fd, buffer, 64);
+        auto content_result = tlib::read(*fd, buffer, 64);
 
         if(content_result.valid()){
             auto chars = *content_result;
@@ -30,16 +30,16 @@ int main(int, char*[]){
 
             auto value = std::parse(value_str);
 
-            printf("Uptime: %u:%u:%u\n", value / 3600, (value % 3600) / 60, value % 60);
+            tlib::printf("Uptime: %u:%u:%u\n", value / 3600, (value % 3600) / 60, value % 60);
         } else {
-             printf("uptime: error: %s\n", std::error_message(content_result.error()));
+            tlib::printf("uptime: error: %s\n", std::error_message(content_result.error()));
         }
 
         delete[] buffer;
 
-        close(*fd);
+        tlib::close(*fd);
     } else {
-        printf("uptime: error: %s\n", std::error_message(fd.error()));
+        tlib::printf("uptime: error: %s\n", std::error_message(fd.error()));
     }
 
     return 0;

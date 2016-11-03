@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include "tlib/system.hpp"
@@ -20,7 +20,7 @@ uint64_t syscall_get(uint64_t call){
 
 } // end of anonymous namespace
 
-void exit(size_t return_code) {
+void tlib::exit(size_t return_code) {
     asm volatile("mov rax, 0x666; mov rbx, %[ret]; int 50"
         : //No outputs
         : [ret] "g" (return_code)
@@ -29,7 +29,7 @@ void exit(size_t return_code) {
     __builtin_unreachable();
 }
 
-std::expected<size_t> exec(const char* executable, const std::vector<std::string>& params){
+std::expected<size_t> tlib::exec(const char* executable, const std::vector<std::string>& params){
     const char** args = nullptr;
     if(!params.empty()){
         args = new const char*[params.size()];
@@ -56,22 +56,22 @@ std::expected<size_t> exec(const char* executable, const std::vector<std::string
     }
 }
 
-void await_termination(size_t pid) {
+void tlib::await_termination(size_t pid) {
     asm volatile("mov rax, 6; mov rbx, %[pid]; int 50;"
         : //No outputs
         : [pid] "g" (pid)
         : "rax", "rbx");
 }
 
-void sleep_ms(size_t ms){
+void tlib::sleep_ms(size_t ms){
     asm volatile("mov rax, 4; mov rbx, %[ms]; int 50"
         : //No outputs
         : [ms] "g" (ms)
         : "rax", "rbx");
 }
 
-datetime local_date(){
-    datetime date_s;
+tlib::datetime tlib::local_date(){
+    tlib::datetime date_s;
 
     asm volatile("mov rax, 0x400; mov rbx, %[buffer]; int 50; "
         : /* No outputs */
@@ -81,15 +81,15 @@ datetime local_date(){
     return date_s;
 }
 
-uint64_t s_time(){
+uint64_t tlib::s_time(){
     return syscall_get(0x401);
 }
 
-uint64_t ms_time(){
+uint64_t tlib::ms_time(){
     return syscall_get(0x402);
 }
 
-std::expected<size_t> exec_and_wait(const char* executable, const std::vector<std::string>& params){
+std::expected<size_t> tlib::exec_and_wait(const char* executable, const std::vector<std::string>& params){
     auto result = exec(executable, params);
 
     if(result.valid()){
@@ -99,8 +99,8 @@ std::expected<size_t> exec_and_wait(const char* executable, const std::vector<st
     return std::move(result);
 }
 
-void reboot(){
-    asm volatile("mov rax, 201; int 50"
+void tlib::reboot(){
+    asm volatile("mov rax, 0x50; int 50"
         : //No outputs
         : //No inputs
         : "rax");
@@ -108,8 +108,8 @@ void reboot(){
     __builtin_unreachable();
 }
 
-void shutdown(){
-    asm volatile("mov rax, 202; int 50"
+void tlib::shutdown(){
+    asm volatile("mov rax, 0x51; int 50"
         : //No outputs
         : //No inputs
         : "rax");
@@ -117,8 +117,8 @@ void shutdown(){
     __builtin_unreachable();
 }
 
-void alpha(){
-    asm volatile("mov rax, 0x6666; int 50"
+void tlib::alpha(){
+    asm volatile("mov rax, 0x66; int 50"
         : //No outputs
         : //No inputs
         : "rax");

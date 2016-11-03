@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <types.hpp>
@@ -12,7 +12,7 @@
 #include "paging.hpp"
 #include "kernel.hpp"
 #include "physical_allocator.hpp"
-#include "console.hpp"
+#include "print.hpp"
 #include "assert.hpp"
 #include "process.hpp"
 #include "physical_pointer.hpp"
@@ -248,8 +248,6 @@ void paging::init(){
 
     //8. Perform some basic tests
 
-    //TODO Some basic tests here
-
     logging::logf(logging::log_level::TRACE, "paging: basic tests\n");
 
     if(!page_present(virtual_pml4t_start)){
@@ -259,6 +257,12 @@ void paging::init(){
 
     if(physical_address(virtual_pml4t_start) != physical_pml4t_start){
         logging::logf(logging::log_level::ERROR, "paging: PML4T is not correctly mapped\n");
+        suspend_boot();
+    }
+
+    // The first MiB must be identity mapped
+    if(physical_address(0x6666) != 0x6666){
+        logging::logf(logging::log_level::ERROR, "paging: Invalid identity mapping\n");
         suspend_boot();
     }
 
@@ -292,7 +296,7 @@ size_t paging::physical_address(size_t virt){
     auto pde = pd_entry(virt);
     auto pte = pt_entry(virt);
 
-    auto pml4t = find_pml4t();;
+    auto pml4t = find_pml4t();
     auto pdpt = find_pdpt(pml4t, pml4e);
     auto pd = find_pd(pdpt, pdpte);
     auto pt = find_pt(pd, pde);
@@ -307,7 +311,7 @@ bool paging::page_present(size_t virt){
     auto pde = pd_entry(virt);
     auto pte = pt_entry(virt);
 
-    auto pml4t = find_pml4t();;
+    auto pml4t = find_pml4t();
     if(!(reinterpret_cast<uintptr_t>(pml4t[pml4e]) & PRESENT)){
         return false;
     }
@@ -350,7 +354,7 @@ bool paging::map(size_t virt, size_t physical, uint8_t flags){
     auto pde = pd_entry(virt);
     auto pte = pt_entry(virt);
 
-    auto pml4t = find_pml4t();;
+    auto pml4t = find_pml4t();
     thor_assert(reinterpret_cast<uintptr_t>(pml4t[pml4e]) & PRESENT, "A PML4T entry is not PRESENT");
 
     auto pdpt = find_pdpt(pml4t, pml4e);
@@ -419,7 +423,7 @@ bool paging::unmap(size_t virt){
     auto pde = pd_entry(virt);
     auto pte = pt_entry(virt);
 
-    auto pml4t = find_pml4t();;
+    auto pml4t = find_pml4t();
 
     //If not present, returns directly
     if(!(reinterpret_cast<uintptr_t>(pml4t[pml4e]) & PRESENT)){
@@ -518,7 +522,7 @@ bool paging::user_map(scheduler::process_t& process, size_t virt, size_t physica
         clear_physical_page(physical_pdpt);
 
         process.paging_size += paging::PAGE_SIZE;
-        process.segments.push_back({physical_pdpt, 1});
+        process.segments.emplace_back(physical_pdpt, 1UL);
     }
 
     auto physical_pdpt = reinterpret_cast<uintptr_t>(pml4t[pml4e]) & ~0xFFF;
@@ -537,7 +541,7 @@ bool paging::user_map(scheduler::process_t& process, size_t virt, size_t physica
         clear_physical_page(physical_pd);
 
         process.paging_size += paging::PAGE_SIZE;
-        process.segments.push_back({physical_pdpt, 1});
+        process.segments.emplace_back(physical_pdpt, 1UL);
     }
 
     auto physical_pd = reinterpret_cast<uintptr_t>(pdpt[pdpte]) & ~0xFFF;
@@ -556,7 +560,7 @@ bool paging::user_map(scheduler::process_t& process, size_t virt, size_t physica
         clear_physical_page(physical_pt);
 
         process.paging_size += paging::PAGE_SIZE;
-        process.segments.push_back({physical_pdpt, 1});
+        process.segments.emplace_back(physical_pdpt, 1UL);
     }
 
     auto physical_pt = reinterpret_cast<uintptr_t>(pd[pde]) & ~0xFFF;

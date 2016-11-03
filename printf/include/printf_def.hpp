@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 inline size_t str_cat(char* destination, const char* source){
@@ -165,6 +165,16 @@ std::string vsprintf(const std::string& format, va_list va){
                     s += "B";
                 }
             }
+            // Boolean
+            else if(ch == 'b'){
+                bool value= va_arg(va, int);
+
+                if(value){
+                    s += "true";
+                } else {
+                    s += "false";
+                }
+            }
             //String
             else if(ch == 's'){
                 const char* arg = va_arg(va, const char*);
@@ -216,7 +226,7 @@ void printf(const std::string& format, ...){
 // Raw versions
 
 //TODO Check for n
-void vsprintf_raw(char* out_buffer, size_t n, const char* format, va_list va){
+void vsprintf_raw(char* out_buffer, size_t /*n*/, const char* format, va_list va){
     char ch;
     int fi = 0;
 
@@ -376,6 +386,16 @@ void vsprintf_raw(char* out_buffer, size_t n, const char* format, va_list va){
                     out_i += str_cat(out_buffer + out_i, "B");
                 }
             }
+            // Boolean
+            else if(ch == 'b'){
+                bool value= va_arg(va, int);
+
+                if(value){
+                    out_i += str_cat(out_buffer + out_i, "true");
+                } else {
+                    out_i += str_cat(out_buffer + out_i, "false");
+                }
+            }
             //String
             else if(ch == 's'){
                 const char* arg = va_arg(va, const char*);
@@ -400,13 +420,11 @@ void vsprintf_raw(char* out_buffer, size_t n, const char* format, va_list va){
     out_buffer[out_i++] = '\0';
 }
 
-void sprintf_raw(const char* format, ...){
+void sprintf_raw(char* buffer, size_t n, const char* format, ...){
     va_list va;
     va_start(va, format);
 
-    char buffer[1024];
-    vsprintf_raw(buffer, 1024, format, va);
-    __printf_raw(buffer);
+    vsprintf_raw(buffer, n, format, va);
 
     va_end(va);
 }

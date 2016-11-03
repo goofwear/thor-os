@@ -31,7 +31,7 @@ thor.flp: hdd.img bootloader/stage1.bin bootloader/stage2.bin init/debug/init.bi
 	dd if=bootloader/stage1.bin of=hdd.img conv=notrunc
 	dd if=bootloader/stage2.bin of=hdd.img seek=1 conv=notrunc
 	sudo /sbin/losetup -o1048576 /dev/loop0 hdd.img
-	sudo /usr/sbin/mkdosfs -v -F32 /dev/loop0
+	sudo mkdosfs -v -F32 /dev/loop0
 	sudo /bin/mount -t vfat /dev/loop0 mnt/fake/
 	sudo mkdir mnt/fake/bin/
 	sudo mkdir mnt/fake/sys/
@@ -51,11 +51,25 @@ qemu: default
 	tail -f virtual.log
 	kill %1
 
-qemu_user: default
+qemu_run: default
 	touch virtual.log
-	sudo qemu-system-x86_64 -enable-kvm -cpu host -serial file:virtual.log -netdev user,id=thor_net0 -device rtl8139,netdev=thor_net0,id=thor_nic0 -vga std -hda hdd.img &
+	sudo run-qemu -enable-kvm -cpu host -serial file:virtual.log -vga std -hda hdd.img &
 	echo "Reading kernel log (Ctrl+C for exit)"
 	tail -f virtual.log
+	kill %1
+
+qemu_user: default
+	touch virtual.log
+	sudo qemu-system-x86_64 -enable-kvm -cpu host -serial file:virtual.log -net user,vlan=0 -net nic,model=rtl8139,vlan=0,macaddr=52:54:00:12:34:56 -net socket,listen=localhost:1234 -net dump,vlan=0,file=thor.pcap -vga std -hda hdd.img &
+	echo "Reading kernel log (Ctrl+C for exit)"
+	tail -f virtual.log
+	kill %1
+
+qemu_user_slave: default
+	touch slave.log
+	sudo qemu-system-x86_64 -enable-kvm -cpu host -serial file:slave.log -net nic,model=rtl8139,vlan=0,macaddr=52:54:00:12:34:57 -net socket,connect=localhost:1234,vlan=0 -vga std -hda hdd.img &
+	echo "Reading kernel log (Ctrl+C for exit)"
+	tail -f slave.log
 	kill %1
 
 bochs: default

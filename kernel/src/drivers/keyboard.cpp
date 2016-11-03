@@ -1,15 +1,18 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include "drivers/keyboard.hpp"
 
 #include "interrupts.hpp"
 #include "kernel_utils.hpp"
-#include "terminal.hpp"
+#include "stdio.hpp"
+#include "logging.hpp"
+
+using keycode = std::keycode;
 
 namespace {
 
@@ -201,7 +204,7 @@ keycode released_codes[128] = {
 
 char qwertz[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8', /* 9 */
-  '9', '0', '-', '=', '\b', /* Backspace */
+  '9', '0', '\'', '=', '\b', /* Backspace */
   '\t',         /* Tab */
   'q', 'w', 'e', 'r',   /* 19 */
   't', 'z', 'u', 'i', 'o', 'p', '[', ']', '\n', /* Enter key */
@@ -209,7 +212,7 @@ char qwertz[128] = {
   'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', /* 39 */
  '\'', '`',   0,        /* Left shift */
  '\\', 'y', 'x', 'c', 'v', 'b', 'n',            /* 49 */
-  'm', ',', '.', '/',   0,              /* Right shift */
+  'm', ',', '.', '-',   0,              /* Right shift */
   '*',
     0,  /* Alt */
   ' ',  /* Space bar */
@@ -219,19 +222,19 @@ char qwertz[128] = {
     0,  /* < ... F10 */
     0,  /* 69 - Num lock*/
     0,  /* Scroll Lock */
-    0,  /* Home key */
-    0,  /* Up Arrow */
-    0,  /* Page Up */
-  '-',
-    0,  /* Left Arrow */
-    0,
-    0,  /* Right Arrow */
-  '+',
-    0,  /* 79 - End key*/
-    0,  /* Down Arrow */
-    0,  /* Page Down */
-    0,  /* Insert Key */
-    0,  /* Delete Key */
+    '7',
+    '8',
+    '9',
+    '-',
+    '4',
+    '5',
+    '6',
+    '+',
+    '1',
+    '2',
+    '3',
+    '0',
+    '.',  /* Delete Key */
     0,   0,   0,
     0,  /* F11 Key */
     0,  /* F12 Key */
@@ -258,18 +261,18 @@ char shifted_qwertz[128] = {
     0,  /* < ... F10 */
     0,  /* 69 - Num lock*/
     0,  /* Scroll Lock */
-    0,  /* Home key */
-    0,  /* Up Arrow */
-    0,  /* Page Up */
-  '-',
-    0,  /* Left Arrow */
-    0,
-    0,  /* Right Arrow */
-  '+',
-    0,  /* 79 - End key*/
-    0,  /* Down Arrow */
-    0,  /* Page Down */
-    0,  /* Insert Key */
+    '7',
+    '8',
+    '9',
+    '-',
+    '4',
+    '5',
+    '6',
+    '+',
+    '1',
+    '2',
+    '3',
+    '0',
     0,  /* Delete Key */
     0,   0,   0,
     0,  /* F11 Key */

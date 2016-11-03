@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <tlib/print.hpp>
@@ -12,20 +12,20 @@ const char* source = "Hello world";
 int main(){
     char buffer[16];
 
-    printf("Read 1 string (max 15)\n");
+    tlib::printf("Read 1 string (max 15)\n");
 
-    auto c = read_input(buffer, 15);
+    auto c = tlib::read_input(buffer, 15);
     buffer[c] = '\0';
-    print(buffer);
+    tlib::print(buffer);
 
-    printf("Read 1 string (max 15) with timeout 5\n");
-    c = read_input(buffer, 15, 5000);
+    tlib::printf("Read 1 string (max 15) with timeout 5\n");
+    c = tlib::read_input(buffer, 15, 5000);
 
     if(c){
         buffer[c] = '\0';
-        print(buffer);
+        tlib::print(buffer);
     } else {
-        printf("Timeout reached\n");
+        tlib::printf("Timeout reached\n");
     }
 
     return 0;

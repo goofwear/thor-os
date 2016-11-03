@@ -1,26 +1,17 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
-#include <vector.hpp>
-#include <string.hpp>
+#include "tlib/errors.hpp"
 
 #include "net/arp_layer.hpp"
-#include "net/arp_cache.hpp"
-#include "net/ip_layer.hpp"
+#include "net/ethernet_layer.hpp"
 
 #include "logging.hpp"
 #include "kernel_utils.hpp"
-#include "sleep_queue.hpp"
-
-namespace {
-
-sleep_queue wait_queue;
-
-} //end of anonymous namespace
 
 uint64_t network::arp::mac3_to_mac64(uint16_t* source_mac){
     size_t mac = 0;
@@ -57,8 +48,14 @@ void network::arp::ip_to_ip2(network::ip::address source_ip, uint16_t* ip){
     }
 }
 
-void network::arp::decode(network::interface_descriptor& interface, network::ethernet::packet& packet){
-    header* arp_header = reinterpret_cast<header*>(packet.payload + packet.index);
+network::arp::layer::layer(network::ethernet::layer* parent) : parent(parent), _cache(this, parent) {
+    parent->register_arp_layer(this);
+}
+
+void network::arp::layer::decode(network::interface_descriptor& interface, network::packet_p& packet){
+    packet->tag(1, packet->index);
+
+    auto* arp_header = reinterpret_cast<header*>(packet->payload + packet->index);
 
     logging::logf(logging::log_level::TRACE, "arp: Start ARP packet handling\n");
 
@@ -108,40 +105,56 @@ void network::arp::decode(network::interface_descriptor& interface, network::eth
 
     // If not an ARP Probe, update the ARP cache
     if(source_prot.raw_address != 0x0){
-        network::arp::update_cache(source_hw, source_prot);
+        _cache.update_cache(source_hw, source_prot);
     }
 
     if(operation == 0x1){
-        if(target_prot == network::ip::make_address(10,0,2,15)){
+        if(target_prot == interface.ip_address){
             logging::logf(logging::log_level::TRACE, "arp: Reply to Request for own IP\n");
 
             // Ask the ethernet layer to craft a packet
-            auto packet = network::ethernet::prepare_packet(interface, sizeof(header), source_hw, ethernet::ether_type::ARP);
+            network::ethernet::packet_descriptor desc{sizeof(header), source_hw, ethernet::ether_type::ARP};
+            auto packet_e = parent->kernel_prepare_packet(interface, desc);
 
-            auto* arp_reply_header = reinterpret_cast<header*>(packet.payload + packet.index);
+            if(packet_e){
+                auto& packet = *packet_e;
 
-            arp_reply_header->hw_type = switch_endian_16(0x1); // ethernet
-            arp_reply_header->protocol_type = switch_endian_16(0x800); // IPV4
-            arp_reply_header->hw_len = 0x6; // MAC Address
-            arp_reply_header->protocol_len = 0x4; // IP Address
-            arp_reply_header->operation = switch_endian_16(0x2); //ARP Reply
+                auto* arp_reply_header = reinterpret_cast<header*>(packet->payload + packet->index);
 
-            mac64_to_mac3(interface.mac_address, arp_reply_header->source_hw_addr);
+                arp_reply_header->hw_type = switch_endian_16(0x1); // ethernet
+                arp_reply_header->protocol_type = switch_endian_16(0x800); // IPV4
+                arp_reply_header->hw_len = 0x6; // MAC Address
+                arp_reply_header->protocol_len = 0x4; // IP Address
+                arp_reply_header->operation = switch_endian_16(0x2); //ARP Reply
 
-            std::copy_n(arp_header->source_hw_addr, 3, arp_reply_header->target_hw_addr);
+                mac64_to_mac3(interface.mac_address, arp_reply_header->source_hw_addr);
 
-            std::copy_n(arp_header->target_protocol_addr, 2, arp_reply_header->source_protocol_addr);
-            std::copy_n(arp_header->source_protocol_addr, 2, arp_reply_header->target_protocol_addr);
+                std::copy_n(arp_header->source_hw_addr, 3, arp_reply_header->target_hw_addr);
 
-            network::ethernet::finalize_packet(interface, packet);
+                std::copy_n(arp_header->target_protocol_addr, 2, arp_reply_header->source_protocol_addr);
+                std::copy_n(arp_header->source_protocol_addr, 2, arp_reply_header->target_protocol_addr);
+
+                parent->finalize_packet(interface, packet);
+            } else {
+                logging::logf(logging::log_level::ERROR, "arp: Impossible to reply to ARP Request: %s\n", std::error_message(packet_e.error()));
+
+            }
         }
     } else if(operation == 0x2){
         logging::logf(logging::log_level::TRACE, "arp: Handle Reply\n");
 
-        wait_queue.wake_up_all();
+        wait_queue.notify_all();
     }
 }
 
-void network::arp::wait_for_reply(){
-    wait_queue.sleep();
+void network::arp::layer::wait_for_reply(){
+    wait_queue.wait();
+}
+
+void network::arp::layer::wait_for_reply(size_t ms){
+    wait_queue.wait_for(ms);
+}
+
+network::arp::cache& network::arp::layer::get_cache(){
+    return _cache;
 }

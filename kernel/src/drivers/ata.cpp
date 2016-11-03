@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <lock_guard.hpp>
@@ -12,13 +12,15 @@
 #include "drivers/ata.hpp"
 #include "drivers/ata_constants.hpp"
 
+#include "conc/mutex.hpp"
+#include "conc/deferred_unique_mutex.hpp"
+
 #include "kernel_utils.hpp"
 #include "kalloc.hpp"
 #include "thor.hpp"
 #include "interrupts.hpp"
 #include "console.hpp"
 #include "disks.hpp"
-#include "mutex.hpp"
 #include "block_cache.hpp"
 
 namespace {
@@ -27,10 +29,10 @@ static constexpr const size_t BLOCK_SIZE = 512;
 
 ata::drive_descriptor* drives;
 
-mutex<> ata_lock;
+mutex ata_lock;
 
-mutex<> primary_lock;
-mutex<> secondary_lock;
+deferred_unique_mutex primary_lock;
+deferred_unique_mutex secondary_lock;
 
 block_cache cache;
 
@@ -39,7 +41,7 @@ volatile bool secondary_invoked = false;
 
 void primary_controller_handler(interrupt::syscall_regs*, void*){
     if(scheduler::is_started()){
-        primary_lock.release();
+        primary_lock.notify();
     } else {
         primary_invoked = true;
     }
@@ -47,7 +49,7 @@ void primary_controller_handler(interrupt::syscall_regs*, void*){
 
 void secondary_controller_handler(interrupt::syscall_regs*, void*){
     if(scheduler::is_started()){
-        secondary_lock.release();
+        secondary_lock.notify();
     } else {
         secondary_invoked = true;
     }
@@ -55,7 +57,8 @@ void secondary_controller_handler(interrupt::syscall_regs*, void*){
 
 void ata_wait_irq_primary(){
     if(scheduler::is_started()){
-        primary_lock.acquire();
+        primary_lock.claim();
+        primary_lock.wait();
     } else {
         while(!primary_invoked){
             asm volatile ("nop");
@@ -71,7 +74,8 @@ void ata_wait_irq_primary(){
 
 void ata_wait_irq_secondary(){
     if(scheduler::is_started()){
-        secondary_lock.acquire();
+        secondary_lock.claim();
+        secondary_lock.wait();
     } else {
         while(!secondary_invoked){
             asm volatile ("nop");
@@ -346,13 +350,6 @@ void identify(ata::drive_descriptor& drive){
 void ata::detect_disks(){
     ata_lock.init();
 
-    primary_lock.init(0);
-    secondary_lock.init(0);
-
-    ata_lock.set_name("ata_lock");
-    primary_lock.set_name("ata_primary_lock");
-    secondary_lock.set_name("ata_secondary_lock");
-
     // Init the cache with 256 blocks
     cache.init(BLOCK_SIZE, 256);
 
@@ -456,7 +453,7 @@ size_t ata::ata_driver::size(void* data){
     auto descriptor = reinterpret_cast<disks::disk_descriptor*>(data);
     auto disk = reinterpret_cast<ata::drive_descriptor*>(descriptor->descriptor);
 
-    return disk->size;;
+    return disk->size;
 }
 
 size_t ata::ata_part_driver::read(void* data, char* destination, size_t count, size_t offset, size_t& read){

@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef TERMINAL_H
@@ -13,30 +13,35 @@
 
 #include <tlib/keycode.hpp>
 
-#include "sleep_queue.hpp"
+#include "conc/condition_variable.hpp"
+
+#include "fs/devfs.hpp"
+
+#include "console.hpp"
 
 namespace stdio {
 
 constexpr const size_t INPUT_BUFFER_SIZE = 256;
 
+/*!
+ * \brief A virtual terminal
+ */
 struct virtual_terminal {
-    size_t id;
-    bool active;
-    bool canonical;
-    bool mouse;
-    size_t input_thread_pid;
+    /*!
+     * \brief Construct a new virtual_terminal
+     */
+    virtual_terminal(){}
 
-    // Filled by the IRQ
-    circular_buffer<char, 128> keyboard_buffer;
-    circular_buffer<size_t, 128> mouse_buffer;
+    virtual_terminal(const virtual_terminal& rhs) = delete;
+    virtual_terminal& operator=(const virtual_terminal& rhs) = delete;
 
-    // Handled by the input thread
-    circular_buffer<char, INPUT_BUFFER_SIZE> input_buffer;
-    circular_buffer<char, 2 * INPUT_BUFFER_SIZE> canonical_buffer;
-    circular_buffer<size_t, 3 * INPUT_BUFFER_SIZE> raw_buffer;
+    virtual_terminal(virtual_terminal&& rhs) = delete;
+    virtual_terminal& operator=(virtual_terminal&& rhs) = delete;
 
-    sleep_queue input_queue;
-
+    /*!
+     * \brief Print the given char to the terminal
+     * \param c The character to print
+     */
     void print(char c);
 
     /*!
@@ -47,7 +52,7 @@ struct virtual_terminal {
     /*!
      * \brief Send a mouse input to the terminal (from the keyboard driver)
      */
-    void send_mouse_input(keycode c);
+    void send_mouse_input(std::keycode c);
 
     /*!
      * \brief Reads canonical input in the given buffer
@@ -81,23 +86,58 @@ struct virtual_terminal {
      */
     size_t read_input_raw(size_t ms);
 
+    /*!
+     * \brief Set the canonical mode of the terminal
+     * \param can The canonical mode of the terminal
+     */
     void set_canonical(bool can);
+
+    /*!
+     * \brief Set the mouse mode of the terminal
+     * \param can The mouse mode of the terminal
+     */
     void set_mouse(bool m);
 
-    virtual_terminal(){}
+    /*!
+     * \brief Returns true if the terminal is in canonical mode, false otherwise
+     */
+    bool is_canonical() const;
 
-    virtual_terminal(const virtual_terminal& rhs) = delete;
-    virtual_terminal& operator=(const virtual_terminal& rhs) = delete;
+    /*!
+     * \brief Returns true if the terminal is in mouse mode, false otherwise
+     */
+    bool is_mouse() const;
 
-    virtual_terminal(virtual_terminal&& rhs) = delete;
-    virtual_terminal& operator=(virtual_terminal&& rhs) = delete;
+    /*!
+     * \brief Set the active mode of the terminal
+     */
+    void set_active(bool);
+
+    /*!
+     * \brief Returns the console linked to this terminal
+     */
+    console& get_console();
+
+    size_t id;
+    bool active;
+    bool canonical;
+    bool mouse;
+    size_t input_thread_pid;
+
+    // Filled by the IRQ
+    circular_buffer<char, 128> keyboard_buffer;
+    circular_buffer<size_t, 128> mouse_buffer;
+
+    // Handled by the input thread
+    circular_buffer<char, INPUT_BUFFER_SIZE> input_buffer;
+    circular_buffer<char, 2 * INPUT_BUFFER_SIZE> canonical_buffer;
+    circular_buffer<size_t, 3 * INPUT_BUFFER_SIZE> raw_buffer;
+
+    condition_variable input_queue;
+
+private:
+    console cons;
 };
-
-void init_terminals();
-void finalize();
-
-virtual_terminal& get_active_terminal();
-virtual_terminal& get_terminal(size_t id);
 
 } //end of namespace stdio
 

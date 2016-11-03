@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef VFS_FILE_H
@@ -21,9 +21,9 @@ struct file {
     bool hidden;
     bool system;
     uint64_t size;
-    datetime created;
-    datetime modified;
-    datetime accessed;
+    rtc::datetime created;
+    rtc::datetime modified;
+    rtc::datetime accessed;
 
     //File system specific
     size_t location;

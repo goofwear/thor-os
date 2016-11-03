@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef STD_FUNCTION_HPP
@@ -26,7 +26,8 @@ public:
         static_assert(sizeof(impl) <= sizeof(storage), "Limited size in function");
         static_assert(std::is_trivially_destructible<T>::value, "Limited support of function");
 
-        new (&storage) impl(std::forward<T>(t));
+        auto* s = static_cast<void*>(&storage[0]);
+        new (s) impl(std::forward<T>(t));
     }
 
     function(const function& rhs) = delete;
@@ -36,7 +37,9 @@ public:
     function& operator=(function&& rhs) = delete;
 
     R operator()(Args... args) const {
-        return (*reinterpret_cast<const concept*>(&storage))(std::forward<Args>(args)...);
+        auto* s = static_cast<const void*>(&storage[0]);
+        auto* c = static_cast<const concept*>(s);
+        return (*c)(std::forward<Args>(args)...);
     }
 
 private:

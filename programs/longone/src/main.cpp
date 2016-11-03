@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <tlib/print.hpp>
@@ -22,7 +22,7 @@ auto message = "I'm one";
 int main(){
     while(true){
         fibonacci_slow(current);
-        print_line(message);
+        tlib::print_line(message);
     }
 
     return 0;

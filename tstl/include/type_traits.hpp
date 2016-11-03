@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef TYPE_TRAITS_H
@@ -15,94 +15,140 @@ namespace std {
 
 template <typename T>
 struct iterator_traits {
-    using value_type = typename T::value_type;
+    using value_type      = typename T::value_type; ///< The value type of the iterator
+    using reference       = typename T::reference; ///< The reference type of the iterator
+    using pointer         = typename T::pointer; ///< The pointer type of the iterator
+    using difference_type = typename T::difference_type; ///< The difference type of the iterator
 };
 
 template <typename T>
 struct iterator_traits <T*> {
-    using value_type = T;
+    using value_type      = T; ///< The value type of the iterator
+    using reference       = T&; ///< The reference type of the iterator
+    using pointer         = T*; ///< The pointer type of the iterator
+    using difference_type = size_t; ///< The difference type of the iterator
 };
 
-template<class T>
+/* remove_reference */
+
+template<typename T>
 struct remove_reference {
-    typedef T type;
+    using type = T;
 };
 
-template<class T>
+template<typename T>
 struct remove_reference<T&>{
-    typedef T type;
+    using type = T;
 };
 
-template<class T>
+template<typename T>
 struct remove_reference<T&&> {
-    typedef T type;
+    using type = T;
 };
+
+template<typename T>
+using remove_reference_t = typename remove_reference<T>::type;
 
 /* remove_extent */
 
-template<class T>
+template<typename T>
 struct remove_extent {
-    typedef T type;
+    using type = T;
 };
 
-template<class T>
+template<typename T>
 struct remove_extent<T[]> {
-    typedef T type;
+    using type = T;
 };
 
-template<class T, size_t N>
+template<typename T, size_t N>
 struct remove_extent<T[N]> {
-    typedef T type;
+    using type = T;
 };
+
+template<typename T>
+using remove_extent_t = typename remove_extent<T>::type;
 
 /* remove_const */
 
-template<class T>
+template<typename T>
 struct remove_const {
-    typedef T type;
+    using type = T;
 };
 
-template<class T>
+template<typename T>
 struct remove_const<const T> {
-    typedef T type;
+    using type = T;
 };
+
+template<typename T>
+using remove_const_t = typename remove_const<T>::type;
+
+/* add_const */
+
+template<typename T>
+struct add_const {
+    using type = const T;
+};
+
+template<typename T>
+struct add_const<const T> {
+    using type = T;
+};
+
+template<typename T>
+using add_const_t = typename add_const<T>::type;
 
 /* remove_volatile */
 
-template<class T>
+template<typename T>
 struct remove_volatile {
-    typedef T type;
+    using type = T;
 };
 
-template<class T>
+template<typename T>
 struct remove_volatile<volatile T> {
-    typedef T type;
+    using type = T;
 };
+
+template<typename T>
+using remove_volatile_t = typename remove_volatile<T>::type;
 
 /* remove_cv */
 
-template<class T>
+template<typename T>
 struct remove_cv {
-    typedef typename std::remove_volatile<typename std::remove_const<T>::type>::type type;
+    using type = typename std::remove_volatile<typename std::remove_const<T>::type>::type;
 };
+
+template<typename T>
+using remove_cv_t = typename remove_cv<T>::type;
 
 /* conditional */
 
-template<bool B, class T, class F>
+template<bool B, typename T, typename F>
 struct conditional {
-    typedef T type;
+    using type = T;
 };
 
-template<class T, class F>
+template<typename T, typename F>
 struct conditional<false, T, F> {
-    typedef F type;
+    using type = F;
 };
+
+template<bool B, typename T, typename F>
+using conditional_t = typename std::conditional<B, T, F>::type;
 
 /* is_trivially_destructible */
 
 template<typename T>
 struct is_trivially_destructible {
     static constexpr const bool value = __has_trivial_destructor(T);
+};
+
+template<>
+struct is_trivially_destructible<void> {
+    static constexpr const bool value = true;
 };
 
 /* is_trivially_destructible */
@@ -112,18 +158,45 @@ struct has_trivial_assign {
     static constexpr const bool value = __has_trivial_assign(T);
 };
 
+/* is_pointer */
+
+/*!
+ * \brief Traits to test if given type is a pointer type
+ */
+template <typename T>
+struct is_pointer {
+    static constexpr const bool value = false;
+};
+
+/*!
+ * \copdoc is_pointer
+ */
+template <typename T>
+struct is_pointer<T*>{
+    static constexpr const bool value = true;
+};
+
 /* is_reference */
 
+/*!
+ * \brief Traits to test if given type is a reference type
+ */
 template <typename T>
 struct is_reference {
     static constexpr const bool value = false;
 };
 
+/*!
+ * \copdoc is_reference
+ */
 template <typename T>
 struct is_reference<T&>{
     static constexpr const bool value = true;
 };
 
+/*!
+ * \copdoc is_reference
+ */
 template <typename T>
 struct is_reference<T&&>{
     static constexpr const bool value = true;
@@ -131,17 +204,26 @@ struct is_reference<T&&>{
 
 /* is_array */
 
-template<class T>
+/*!
+ * \brief Traits to test if given type is an array type
+ */
+template<typename T>
 struct is_array {
     static constexpr const bool value = false;
 };
 
-template<class T>
+/*!
+ * \copdoc is_array
+ */
+template<typename T>
 struct is_array<T[]>{
     static constexpr const bool value = true;
 };
 
-template<class T, size_t N>
+/*!
+ * \copdoc is_array
+ */
+template<typename T, size_t N>
 struct is_array<T[N]>{
     static constexpr const bool value = true;
 };
@@ -153,12 +235,12 @@ struct is_function {
     static constexpr const bool value = false;
 };
 
-template<class Ret, class... Args>
+template<typename Ret, typename... Args>
 struct is_function<Ret(Args...)> {
     static constexpr const bool value = true;
 };
 
-template<class Ret, class... Args>
+template<typename Ret, typename... Args>
 struct is_function<Ret(Args......)> {
     static constexpr const bool value = true;
 };
@@ -170,46 +252,125 @@ struct add_rvalue_reference;
 
 template<typename T>
 struct add_rvalue_reference<T, typename std::enable_if_t<std::is_reference<T>::value>> {
-    typedef T type;
+    using type = T;
 };
 
 template<typename T>
 struct add_rvalue_reference<T, typename std::disable_if_t<!std::is_reference<T>::value>> {
-    typedef T&& type;
+    using type = T&&;
 };
 
 /* add_pointer */
 
 template<typename T>
 struct add_pointer {
-    typedef typename std::remove_reference<T>::type* type;
+    using type = typename std::remove_reference<T>::type*;
 };
+
+template<typename T>
+using add_pointer_t = typename add_pointer<T>::type;
 
 /* decay */
 
 template<typename T>
 struct decay {
-    typedef typename std::remove_reference<T>::type U;
-    typedef typename std::conditional<
+    using U    = std::remove_reference_t<T>;
+    using type = std::conditional_t<
         std::is_array<U>::value,
-        typename std::remove_extent<U>::type*,
-        typename std::conditional<
+        std::remove_extent_t<U>*,
+        std::conditional_t<
             std::is_function<U>::value,
-            typename std::add_pointer<U>::type,
-            typename std::remove_cv<U>::type
-        >::type
-    >::type type;
+            std::add_pointer_t<U>,
+            std::remove_cv_t<U>>>;
 };
 
 /* is_same */
 
+/*!
+ * \brief Traits to test if two types are the same
+ */
 template<typename T1, typename T2>
 struct is_same {
     static constexpr const bool value = false;
 };
 
+/*!
+ * \copydoc is_same
+ */
 template<typename T1>
 struct is_same <T1, T1> {
+    static constexpr const bool value = true;
+};
+
+/* is_integral */
+
+template <typename>
+struct is_integral {
+    static constexpr const bool value = false;
+};
+
+template <typename T>
+struct is_integral <const T>{
+    static constexpr const bool value = is_integral<T>::value;
+};
+
+template <>
+struct is_integral <bool> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral <char> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral <signed char> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral<unsigned char> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral<short> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral<unsigned short> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral<int> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral<unsigned int> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral<long> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral<unsigned long> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral<long long> {
+    static constexpr const bool value = true;
+};
+
+template <>
+struct is_integral<unsigned long long> {
     static constexpr const bool value = true;
 };
 

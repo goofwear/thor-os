@@ -1,12 +1,14 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef VFS_H
 #define VFS_H
+
+#include <expected.hpp>
 
 #include <tlib/stat_info.hpp>
 #include <tlib/statfs_info.hpp>
@@ -14,6 +16,8 @@
 #include "vfs/path.hpp"
 
 namespace vfs {
+
+using fd_t = size_t;
 
 /*!
  * \brief Enumeration for all supported partition types
@@ -37,12 +41,12 @@ void init();
  * \param flags The opening flags
  * \return The file descriptor on success, a negative error code otherwise
  */
-int64_t open(const char* file, size_t flags);
+std::expected<fd_t> open(const char* file, size_t flags);
 
 /*!
  * \brief Close the given file descriptor
  */
-void close(size_t fd);
+void close(fd_t fd);
 
 /*!
  * \brief Returns information about the file represented by the fd
@@ -50,7 +54,7 @@ void close(size_t fd);
  * \param info The info to fill
  * \return a status code
  */
-int64_t stat(size_t fd, stat_info& info);
+std::expected<void> stat(fd_t fd, vfs::stat_info& info);
 
 /*!
  * \brief Returns information about the file system
@@ -58,21 +62,21 @@ int64_t stat(size_t fd, stat_info& info);
  * \param info The info to fill
  * \return a status code
  */
-int64_t statfs(const char* mount_point, statfs_info& info);
+std::expected<void> statfs(const char* mount_point, vfs::statfs_info& info);
 
 /*!
  * \brief Create a new directory
  * \param file Path to the directory to create
  * \return a status code
  */
-int64_t mkdir(const char* file);
+std::expected<void> mkdir(const char* file);
 
 /*!
  * \brief Remove a file
  * \param file Path to the file to remove
  * \return a status code
  */
-int64_t rm(const char* file);
+std::expected<void> rm(const char* file);
 
 /*!
  * \brief Read from a file
@@ -82,7 +86,18 @@ int64_t rm(const char* file);
  * \param offset The index where to start reading the file
  * \return a status code
  */
-int64_t read(size_t fd, char* buffer, size_t count, size_t offset = 0);
+std::expected<size_t> read(fd_t fd, char* buffer, size_t count, size_t offset = 0);
+
+/*!
+ * \brief Read from a file with a timeout
+ * \param fd The file descriptor to the file
+ * \param buffer The buffer to write to
+ * \param count The number of bytes to read
+ * \param offset The index where to start reading the file
+ * \param ms The maximum time in milliseconds to wait for
+ * \return a status code
+ */
+std::expected<size_t> read(fd_t fd, char* buffer, size_t count, size_t offset, size_t ms);
 
 /*!
  * \brief Write to a file
@@ -92,7 +107,7 @@ int64_t read(size_t fd, char* buffer, size_t count, size_t offset = 0);
  * \param offset The index where to start writting the file
  * \return a status code
  */
-int64_t write(size_t fd, const char* buffer, size_t count, size_t offset = 0);
+std::expected<size_t> write(fd_t fd, const char* buffer, size_t count, size_t offset = 0);
 
 /*!
  * \brief Clear parts of a file content
@@ -101,7 +116,7 @@ int64_t write(size_t fd, const char* buffer, size_t count, size_t offset = 0);
  * \param offset The index where to start writting the file
  * \return a status code
  */
-int64_t clear(size_t fd, size_t count, size_t offset = 0);
+std::expected<size_t> clear(fd_t fd, size_t count, size_t offset = 0);
 
 /*!
  * \brief Truncate the size of a file
@@ -109,7 +124,7 @@ int64_t clear(size_t fd, size_t count, size_t offset = 0);
  * \param size The new size
  * \return a status code
  */
-int64_t truncate(size_t fd, size_t size);
+std::expected<void> truncate(fd_t fd, size_t size);
 
 /*!
  * \brief List entries in the given directory
@@ -118,7 +133,7 @@ int64_t truncate(size_t fd, size_t size);
  * \param size The maximum size of the buffer
  * \return a status code
  */
-int64_t entries(size_t fd, char* buffer, size_t size);
+std::expected<size_t> entries(fd_t fd, char* buffer, size_t size);
 
 /*!
  * \brief List mounted file systems.
@@ -126,7 +141,7 @@ int64_t entries(size_t fd, char* buffer, size_t size);
  * \param size The maximum size of the buffer
  * \return a status code
  */
-int64_t mounts(char* buffer, size_t size);
+std::expected<size_t> mounts(char* buffer, size_t size);
 
 /*!
  * \brief Mount a new partition
@@ -135,7 +150,7 @@ int64_t mounts(char* buffer, size_t size);
  * \param dev_fd Device file descriptor
  * \return a status code
  */
-int64_t mount(partition_type type, size_t mp_fd, size_t dev_fd);
+std::expected<void> mount(partition_type type, fd_t mp_fd, fd_t dev_fd);
 
 /*!
  * \brief Mount a new partition
@@ -147,7 +162,7 @@ int64_t mount(partition_type type, size_t mp_fd, size_t dev_fd);
  * \param device Device path
  * \return a status code
  */
-int64_t mount(partition_type type, const char* mount_point, const char* device);
+std::expected<void> mount(partition_type type, const char* mount_point, const char* device);
 
 /*!
  * \brief Directly read a file into a std::string buffer
@@ -160,7 +175,7 @@ int64_t mount(partition_type type, const char* mount_point, const char* device);
  *
  * \return An error code if something went wrong, 0 otherwise
  */
-int64_t direct_read(const path& file, std::string& content);
+std::expected<size_t> direct_read(const path& file, std::string& content);
 
 /*!
  * \brief Directly read a file or a device
@@ -174,7 +189,7 @@ int64_t direct_read(const path& file, std::string& content);
  *
  * \return An error code if something went wrong, 0 otherwise
  */
-int64_t direct_read(const path& file, char* buffer, size_t count, size_t offset = 0);
+std::expected<size_t> direct_read(const path& file, char* buffer, size_t count, size_t offset = 0);
 
 /*!
  * \brief Directly write a file or a device
@@ -188,7 +203,7 @@ int64_t direct_read(const path& file, char* buffer, size_t count, size_t offset 
  *
  * \return An error code if something went wrong, 0 otherwise
  */
-int64_t direct_write(const path& file, const char* buffer, size_t count, size_t offset = 0);
+std::expected<size_t> direct_write(const path& file, const char* buffer, size_t count, size_t offset = 0);
 
 } //end of namespace vfs
 

@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include "tlib/print.hpp"
@@ -15,9 +15,8 @@ extern "C" {
 uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
 
 __attribute__((noreturn)) void __stack_chk_fail(){
-    printf("Stack smashing detected \n");
-    //TODO printf("pid=%u\n", scheduler::get_pid());
-    exit(1);
+    tlib::printf("Stack smashing detected \n");
+    tlib::exit(1);
 }
 
-}
+} // end of extern "C"

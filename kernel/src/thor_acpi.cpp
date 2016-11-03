@@ -1,18 +1,22 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 /*
  * This file contains the OS specific layer
  */
 
+#include "conc/mutex.hpp"
+#include "conc/semaphore.hpp"
+#include "conc/int_lock.hpp"
+
 #include "acpica.hpp"
 
 #include "kalloc.hpp"
-#include "console.hpp"
+#include "print.hpp"
 #include "scheduler.hpp"
 #include "virtual_allocator.hpp"
 #include "paging.hpp"
@@ -21,10 +25,6 @@
 #include "timer.hpp"
 #include "drivers/pci.hpp"
 #include "logging.hpp"
-
-#include "mutex.hpp"
-#include "semaphore.hpp"
-#include "int_lock.hpp"
 
 extern "C" {
 
@@ -306,7 +306,7 @@ void AcpiOsDeleteMutex(ACPI_MUTEX handle){
 ACPI_STATUS AcpiOsAcquireMutex(ACPI_MUTEX handle, UINT16 Timeout){
     auto* lock = static_cast<mutex<false>*>(handle);
 
-    lock->acquire();
+    lock->lock();
 
     return AE_OK;
 }
@@ -317,7 +317,7 @@ ACPI_STATUS AcpiOsAcquireMutex(ACPI_MUTEX handle, UINT16 Timeout){
 void AcpiOsReleaseMutex(ACPI_MUTEX handle){
     auto* lock = static_cast<mutex<false>*>(handle);
 
-    lock->release();
+    lock->unlock();
 }
 
 #endif
@@ -353,7 +353,7 @@ ACPI_STATUS AcpiOsWaitSemaphore(ACPI_SEMAPHORE handle, UINT32 units, UINT16 /*ti
     auto* lock = static_cast<semaphore*>(handle);
 
     for(size_t i = 0; i < units; ++i){
-        lock->acquire();
+        lock->lock();
     }
 
     return AE_OK;
@@ -396,7 +396,7 @@ void AcpiOsDeleteLock(ACPI_HANDLE handle){
 ACPI_CPU_FLAGS AcpiOsAcquireLock(ACPI_SPINLOCK handle){
     auto* lock = static_cast<int_lock*>(handle);
 
-    lock->acquire();
+    lock->lock();
 
     return 0;
 }
@@ -407,7 +407,7 @@ ACPI_CPU_FLAGS AcpiOsAcquireLock(ACPI_SPINLOCK handle){
 void AcpiOsReleaseLock(ACPI_SPINLOCK handle, ACPI_CPU_FLAGS /*flags*/){
     auto* lock = static_cast<int_lock*>(handle);
 
-    lock->release();
+    lock->unlock();
 }
 
 // Input / Output

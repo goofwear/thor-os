@@ -1,12 +1,9 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
-
-#include <vector.hpp>
-#include <string.hpp>
 
 #include "net/ethernet_layer.hpp"
 #include "net/arp_layer.hpp"
@@ -48,6 +45,20 @@ uint16_t type_to_code(network::ethernet::ether_type type){
     return 0x0;
 }
 
+void prepare_packet(network::packet& p, network::interface_descriptor& interface, const network::ethernet::packet_descriptor& descriptor){
+    p.tag(0, 0);
+    p.index = sizeof(network::ethernet::header);
+    p.interface = interface.id;
+
+    auto source_mac = interface.mac_address;
+
+    auto* ether_header = reinterpret_cast<network::ethernet::header*>(p.payload);
+    ether_header->type = switch_endian_16(type_to_code(descriptor.type));
+
+    network::ethernet::mac64_to_mac6(source_mac, ether_header->source.mac);
+    network::ethernet::mac64_to_mac6(descriptor.destination, ether_header->target.mac);
+}
+
 } //end of anonymous namespace
 
 uint64_t network::ethernet::mac6_to_mac64(const char* source_mac){
@@ -66,10 +77,10 @@ void network::ethernet::mac64_to_mac6(uint64_t source_mac, char* mac){
     }
 }
 
-void network::ethernet::decode(network::interface_descriptor& interface, packet& packet){
-    logging::logf(logging::log_level::TRACE, "ethernet: Start decoding new packet\n");
+void network::ethernet::layer::decode(network::interface_descriptor& interface, packet_p& packet){
+    logging::logf(logging::log_level::TRACE, "ethernet: Start decoding new packet (%p)\n", packet.get());
 
-    header* ether_header = reinterpret_cast<header*>(packet.payload);
+    auto* ether_header = reinterpret_cast<header*>(packet->payload);
 
     // Filter out non-ethernet II frames
     if(switch_endian_16(ether_header->type) < 1536){
@@ -83,22 +94,28 @@ void network::ethernet::decode(network::interface_descriptor& interface, packet&
     logging::logf(logging::log_level::TRACE, "ethernet: Source MAC Address %h \n", source_mac);
     logging::logf(logging::log_level::TRACE, "ethernet: Destination MAC Address %h \n", target_mac);
 
-    packet.type = decode_ether_type(ether_header);
-    packet.index += sizeof(header);
+    packet->tag(0, 0);
+    packet->index = sizeof(header);
 
-    switch(packet.type){
+    auto type = decode_ether_type(ether_header);
+
+    switch (type) {
         case ether_type::IPV4:
-            network::ip::decode(interface, packet);
+            ip_layer->decode(interface, packet);
             break;
+
+        case ether_type::ARP:
+            arp_layer->decode(interface, packet);
+            break;
+
         case ether_type::IPV6:
             logging::logf(logging::log_level::TRACE, "ethernet: IPV6 Packet (unsupported)\n");
             break;
-        case ether_type::ARP:
-            network::arp::decode(interface, packet);
-            break;
+
         case ether_type::UNKNOWN:
             logging::logf(logging::log_level::TRACE, "ethernet: Unhandled Packet Type: %u\n", uint64_t(switch_endian_16(ether_header->type)));
             break;
+
         default:
             logging::logf(logging::log_level::ERROR, "ethernet: Unhandled Packet Type in switch: %u\n", uint64_t(switch_endian_16(ether_header->type)));
             break;
@@ -107,24 +124,47 @@ void network::ethernet::decode(network::interface_descriptor& interface, packet&
     logging::logf(logging::log_level::TRACE, "ethernet: Finished decoding packet\n");
 }
 
-network::ethernet::packet network::ethernet::prepare_packet(network::interface_descriptor& interface, size_t size, size_t destination, ether_type type){
-    auto total_size = size + sizeof(header);
+std::expected<network::packet_p> network::ethernet::layer::kernel_prepare_packet(network::interface_descriptor& interface, const packet_descriptor& descriptor){
+    auto total_size = descriptor.size + sizeof(header);
 
-    network::ethernet::packet p(new char[total_size], total_size);
-    p.type = type;
-    p.index = sizeof(header);
+    auto p = std::make_shared<network::packet>(new char[total_size], total_size);
 
-    auto source_mac = interface.mac_address;
-
-    auto* ether_header = reinterpret_cast<header*>(p.payload);
-    ether_header->type = switch_endian_16(type_to_code(type));
-
-    mac64_to_mac6(source_mac, ether_header->source.mac);
-    mac64_to_mac6(destination, ether_header->target.mac);
+    ::prepare_packet(*p, interface, descriptor);
 
     return p;
 }
 
-void network::ethernet::finalize_packet(network::interface_descriptor& interface, packet& p){
-    interface.send(p);
+std::expected<network::packet_p> network::ethernet::layer::user_prepare_packet(char* buffer, network::interface_descriptor& interface, const packet_descriptor* descriptor){
+    auto total_size = descriptor->size + sizeof(header);
+
+    auto p = std::make_shared<network::packet>(buffer, total_size);
+    p->user = true;
+
+    ::prepare_packet(*p, interface, *descriptor);
+
+    return p;
+}
+
+std::expected<void> network::ethernet::layer::finalize_packet(network::interface_descriptor& interface, packet_p& p){
+    if(p->user){
+        // The packet will be handled by a kernel thread, needs to
+        // be copied to kernel memory
+
+        auto kernel_packet = std::make_shared<network::packet>(new char[p->payload_size], p->payload_size);
+        std::copy_n(p->payload, p->payload_size, kernel_packet->payload);
+
+        interface.send(kernel_packet);
+    } else {
+        interface.send(p);
+    }
+
+    return {};
+}
+
+void network::ethernet::layer::register_arp_layer(network::arp::layer* layer){
+    this->arp_layer = layer;
+}
+
+void network::ethernet::layer::layer::register_ip_layer(network::ip::layer* layer){
+    this->ip_layer = layer;
 }

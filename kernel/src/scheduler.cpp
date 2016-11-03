@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <array.hpp>
@@ -14,21 +14,22 @@
 #include <tlib/errors.hpp>
 #include <tlib/elf.hpp>
 
+#include "conc/int_lock.hpp"
+
 #include "scheduler.hpp"
 #include "paging.hpp"
 #include "assert.hpp"
 #include "gdt.hpp"
-#include "terminal.hpp"
+#include "stdio.hpp"
 #include "disks.hpp"
-#include "console.hpp"
+#include "print.hpp"
 #include "physical_allocator.hpp"
 #include "virtual_allocator.hpp"
 #include "physical_pointer.hpp"
-#include "mutex.hpp"
 #include "kernel_utils.hpp"
 #include "logging.hpp"
-#include "int_lock.hpp"
 #include "timer.hpp"
+#include "kernel.hpp"
 
 #include "fs/procfs.hpp"
 
@@ -50,7 +51,9 @@ constexpr const size_t STACK_ALIGNMENT = 16;     ///< In bytes
 constexpr const size_t ROUND_ROBIN_QUANTUM = 25; ///< In milliseconds
 
 //The Process Control Block
-std::array<scheduler::process_control_t, scheduler::MAX_PROCESS> pcb;
+using pcb_t = std::array<scheduler::process_control_t, scheduler::MAX_PROCESS>;
+
+pcb_t pcb;
 
 //Define one run queue for each priority level
 std::array<std::vector<scheduler::pid_t>, scheduler::PRIORITY_LEVELS> run_queues;
@@ -62,10 +65,11 @@ volatile bool started = false;
 volatile size_t rr_quantum = 0;
 
 volatile size_t current_pid;
-size_t next_pid = 0;
+volatile size_t next_pid = 0;
 
 size_t gc_pid = 0;
 size_t idle_pid = 0;
+size_t init_pid = 0;
 
 std::vector<scheduler::pid_t>& run_queue(size_t priority){
     return run_queues[priority - scheduler::MIN_PRIORITY];
@@ -74,6 +78,10 @@ std::vector<scheduler::pid_t>& run_queue(size_t priority){
 void idle_task(){
     while(true){
         asm volatile("hlt");
+
+        //If we go out of 'hlt', there have been an IRQ
+        //There is probably someone ready, let's yield
+        scheduler::yield();
     }
 }
 
@@ -146,8 +154,7 @@ void gc_task(){
                 {
                     std::lock_guard<int_lock> l(queue_lock);
 
-                    size_t index = 0;
-                    for(; index < run_queue(desc.priority).size(); ++index){
+                    for(size_t index = 0; index < run_queue(desc.priority).size(); ++index){
                         if(run_queue(desc.priority)[index] == desc.pid){
                             run_queue(desc.priority).erase(index);
                             break;
@@ -203,15 +210,54 @@ void init_task(){
 
     while(true){
         auto pid = scheduler::exec("/bin/tsh", params);
-        scheduler::await_termination(pid);
+
+        if(!pid){
+            logging::logf(logging::log_level::DEBUG, "scheduler: failed to run the shell: %s\n", std::error_message(pid.error()));
+            return;
+        }
+
+        scheduler::await_termination(*pid);
 
         logging::log(logging::log_level::DEBUG, "scheduler: shell exited, run new one\n");
     }
 }
 
+#define likely(x)    __builtin_expect (!!(x), 1)
+#define unlikely(x)  __builtin_expect (!!(x), 0)
+
+scheduler::pid_t get_free_pid(){
+    // Normally, the next pid should be empty
+    if(likely(pcb[next_pid].state == scheduler::process_state::EMPTY)){
+        auto pid = next_pid;
+        next_pid = (next_pid + 1) % scheduler::MAX_PROCESS;
+        return pid;
+    }
+
+    // If the next pid is not available, iterate until one is empty
+
+    auto pid = (next_pid + 1) % scheduler::MAX_PROCESS;
+    size_t i = 0;
+
+    while(pcb[pid].state != scheduler::process_state::EMPTY && i < scheduler::MAX_PROCESS){
+        pid = (pid + 1) % scheduler::MAX_PROCESS;
+        ++i;
+    }
+
+    // Make sure there was one free
+    if(unlikely(i == scheduler::MAX_PROCESS)){
+        logging::logf(logging::log_level::ERROR, "scheduler: Ran out of process\n");
+        k_print_line("Ran out of processes");
+        suspend_kernel();
+    }
+
+    // Set the next pid
+    next_pid = (pid + 1) % scheduler::MAX_PROCESS;
+
+    return pid;
+}
+
 scheduler::process_t& new_process(){
-    //TODO use get_free_pid() that searchs through the PCB
-    auto pid = next_pid++;
+    auto pid = get_free_pid();
 
     auto& process = pcb[pid];
 
@@ -220,10 +266,13 @@ scheduler::process_t& new_process(){
     process.process.ppid = current_pid;
     process.process.priority = scheduler::DEFAULT_PRIORITY;
     process.state = scheduler::process_state::NEW;
-    process.process.tty = stdio::get_active_terminal().id;
+    process.process.tty = pcb[current_pid].process.tty;
 
     process.process.brk_start = 0;
     process.process.brk_end = 0;
+
+    process.process.wait.pid = pid;
+    process.process.wait.next = nullptr;
 
     // By default, a process is working in root
     process.working_directory = path("/");
@@ -256,13 +305,31 @@ void create_idle_task(){
     idle_pid = idle_process.pid;
 }
 
-void create_init_task(){
-    auto& init_process = scheduler::create_kernel_task("init", new char[scheduler::user_stack_size], new char[scheduler::kernel_stack_size], &init_task);
+void create_init_tasks(){
+    for(size_t i = 0; i < stdio::terminals_count(); ++i){
+        auto& init_process = scheduler::create_kernel_task("init", new char[scheduler::user_stack_size], new char[scheduler::kernel_stack_size], &init_task);
 
-    init_process.ppid = 0;
-    init_process.priority = scheduler::MIN_PRIORITY + 1;
+        init_process.ppid = 0;
+        init_process.priority = scheduler::MIN_PRIORITY + 1;
 
-    scheduler::queue_system_process(init_process.pid);
+        init_process.tty = i;
+
+        auto pid = init_process.pid;
+        if(i == 0){
+            init_pid = pid;
+        }
+
+        auto tty = "/dev/tty" + std::to_string(i);
+
+        // Create the 0,1,2 file descriptors
+        pcb[pid].handles.emplace_back(tty);
+        pcb[pid].handles.emplace_back(tty);
+        pcb[pid].handles.emplace_back(tty);
+
+        scheduler::queue_system_process(pid);
+
+        logging::logf(logging::log_level::DEBUG, "scheduler: init_task %u tty:%u fd:%s\n", pid, init_process.tty, tty.c_str());
+    }
 }
 
 void create_gc_task(){
@@ -287,9 +354,9 @@ void create_post_init_task(){
 
 void switch_to_process(size_t pid){
     if(pcb[current_pid].process.system){
-        logging::logf(logging::log_level::DEBUG, "scheduler: Switch from %u to %u (rip:%u)\n", current_pid, pid, pcb[current_pid].process.context->rip);
+        verbose_logf(logging::log_level::DEBUG, "scheduler: Switch from %u (s:%u) to %u (rip:%u)\n", current_pid, static_cast<size_t>(pcb[current_pid].state), pid, pcb[current_pid].process.context->rip);
     } else {
-        logging::logf(logging::log_level::DEBUG, "scheduler: Switch from %u to %u\n", current_pid, pid);
+        verbose_logf(logging::log_level::DEBUG, "scheduler: Switch from %u (s:%u) to %u\n", current_pid, static_cast<size_t>(pcb[current_pid].state), pid);
     }
 
     // This should never be interrupted
@@ -315,7 +382,7 @@ size_t select_next_process(){
     //1. Run a process of higher priority, if any
     for(size_t p = scheduler::MAX_PRIORITY; p > current_priority; --p){
         for(auto pid : run_queue(p)){
-            if(pcb[pid].state == scheduler::process_state::READY){
+            if(pcb[pid].state == scheduler::process_state::READY || pcb[pid].state == scheduler::process_state::RUNNING){
                 return pid;
             }
         }
@@ -338,7 +405,7 @@ size_t select_next_process(){
             auto index = (next_index + i) % current_run_queue.size();
             auto pid = current_run_queue[index];
 
-            if(pcb[pid].state == scheduler::process_state::READY){
+            if(pcb[pid].state == scheduler::process_state::READY || pcb[pid].state == scheduler::process_state::RUNNING){
                 return pid;
             }
         }
@@ -350,7 +417,7 @@ size_t select_next_process(){
 
     for(size_t p = current_priority - 1; p >= scheduler::MIN_PRIORITY; --p){
         for(auto pid : run_queue(p)){
-            if(pcb[pid].state == scheduler::process_state::READY){
+            if(pcb[pid].state == scheduler::process_state::READY || pcb[pid].state == scheduler::process_state::RUNNING){
                 return pid;
             }
         }
@@ -555,6 +622,7 @@ void init_context(scheduler::process_t& process, const char* buffer, const std::
     auto regs = reinterpret_cast<interrupt::syscall_regs*>(rsp);
 
     regs->rsp = scheduler::user_rsp - sizeof(interrupt::syscall_regs) - args_size; //Not sure about that
+    regs->rbp = 0;
     regs->rip = header->e_entry;
     regs->cs = gdt::USER_CODE_SELECTOR + 3;
     regs->ds = gdt::USER_DATA_SELECTOR + 3;
@@ -585,16 +653,18 @@ uint64_t get_process_cr3(size_t pid){
 void scheduler::init(){
     //Create all the kernel tasks
     create_idle_task();
-    create_init_task();
+    create_init_tasks();
     create_gc_task();
     create_post_init_task();
 
     procfs::set_pcb(pcb.data());
+
+    logging::logf(logging::log_level::TRACE, "scheduler: initialized (PCB size:%m pcb_entry:%m process: %m)\n", sizeof(pcb_t), sizeof(process_control_t), sizeof(process_t));
 }
 
 void scheduler::start(){
     //Run the init task by default
-    current_pid = 1;
+    current_pid = init_pid;
     pcb[current_pid].state = scheduler::process_state::RUNNING;
 
     started = true;
@@ -606,15 +676,15 @@ bool scheduler::is_started(){
     return started;
 }
 
-int64_t scheduler::exec(const std::string& file, const std::vector<std::string>& params){
+std::expected<scheduler::pid_t> scheduler::exec(const std::string& file, const std::vector<std::string>& params){
     logging::log(logging::log_level::TRACE, "scheduler:exec: read_file start\n");
 
     std::string content;
     auto result = vfs::direct_read(path(file), content);
-    if(result < 0){
-        logging::logf(logging::log_level::DEBUG, "scheduler: direct_read error: %s\n", std::error_message(-result));
+    if(!result){
+        logging::logf(logging::log_level::DEBUG, "scheduler: direct_read error: %s\n", std::error_message(result.error()));
 
-        return result;
+        return std::make_unexpected<pid_t, size_t>(result.error());
     }
 
     logging::log(logging::log_level::TRACE, "scheduler:exec: read_file end\n");
@@ -622,7 +692,7 @@ int64_t scheduler::exec(const std::string& file, const std::vector<std::string>&
     if(content.empty()){
         logging::log(logging::log_level::DEBUG, "scheduler:exec: Not a file\n");
 
-        return -std::ERROR_NOT_EXISTS;
+        return std::make_unexpected<pid_t>(std::ERROR_NOT_EXISTS);
     }
 
     auto buffer = content.c_str();
@@ -630,7 +700,7 @@ int64_t scheduler::exec(const std::string& file, const std::vector<std::string>&
     if(!elf::is_valid(buffer)){
         logging::log(logging::log_level::DEBUG, "scheduler:exec: Not a valid file\n");
 
-        return -std::ERROR_NOT_EXECUTABLE;
+        return std::make_unexpected<pid_t>(std::ERROR_NOT_EXECUTABLE);
     }
 
     auto& process = new_process();
@@ -640,7 +710,7 @@ int64_t scheduler::exec(const std::string& file, const std::vector<std::string>&
     if(!create_paging(buffer, process)){
         logging::log(logging::log_level::DEBUG, "scheduler:exec: Impossible to create paging\n");
 
-        return -std::ERROR_FAILED_EXECUTION;
+        return std::make_unexpected<pid_t>(std::ERROR_FAILED_EXECUTION);
     }
 
     process.brk_start = program_break;
@@ -649,6 +719,11 @@ int64_t scheduler::exec(const std::string& file, const std::vector<std::string>&
     init_context(process, buffer, file, params);
 
     pcb[process.pid].working_directory = pcb[current_pid].working_directory;
+
+    // Inherit standard file descriptors from the parent
+    pcb[process.pid].handles.emplace_back(pcb[current_pid].handles[0]);
+    pcb[process.pid].handles.emplace_back(pcb[current_pid].handles[1]);
+    pcb[process.pid].handles.emplace_back(pcb[current_pid].handles[2]);
 
     logging::logf(logging::log_level::DEBUG, "scheduler: Exec process pid=%u, ppid=%u\n", process.pid, process.ppid);
 
@@ -689,35 +764,33 @@ void scheduler::sbrk(size_t inc){
 }
 
 void scheduler::await_termination(pid_t pid){
-    int_lock lock;
-
     while(true){
-        lock.acquire();
+        {
+            direct_int_lock lock;
 
-        bool found = false;
-        for(auto& process : pcb){
-            if(process.process.ppid == current_pid && process.process.pid == pid){
-                if(process.state == process_state::KILLED || process.state == process_state::EMPTY){
-                    lock.release();
-                    return;
+            bool found = false;
+            for(auto& process : pcb){
+                if(process.process.ppid == current_pid && process.process.pid == pid){
+                    if(process.state == process_state::KILLED || process.state == process_state::EMPTY){
+                        return;
+                    }
+
+                    found = true;
+                    break;
                 }
-
-                found = true;
-                break;
             }
+
+            // The process may have already been cleaned, we can simply return
+            if(!found){
+                return;
+            }
+
+            logging::logf(logging::log_level::DEBUG, "scheduler: Process %u waits for %u\n", current_pid, pid);
+
+            pcb[current_pid].state = process_state::WAITING;
         }
 
-        // The process may have already been cleaned, we can simply return
-        if(!found){
-            lock.release();
-            return;
-        }
-
-        logging::logf(logging::log_level::DEBUG, "scheduler: Process %u waits for %u\n", current_pid, pid);
-
-        pcb[current_pid].state = process_state::WAITING;
-
-        lock.release();
+        // Reschedule is out of the critical section
         reschedule();
     }
 }
@@ -747,6 +820,8 @@ void scheduler::kill_current_process(){
 
     //Run another process
     reschedule();
+
+    thor_unreachable("A killed process has been run!");
 }
 
 void scheduler::tick(){
@@ -791,6 +866,21 @@ void scheduler::tick(){
     //At this point we just have to return to the current process
 }
 
+void scheduler::yield(){
+    thor_assert(started, "No interest in yielding before start");
+
+    pcb[current_pid].state = process_state::READY;
+
+    auto pid = select_next_process();
+
+    if(pid != current_pid){
+        verbose_logf(logging::log_level::DEBUG, "scheduler: Yields %u to %u\n", current_pid, pid);
+        switch_to_process(pid);
+    } else {
+        pcb[current_pid].state = process_state::RUNNING;
+    }
+}
+
 void scheduler::reschedule(){
     thor_assert(started, "No interest in rescheduling before start");
 
@@ -825,7 +915,7 @@ scheduler::process_state scheduler::get_process_state(pid_t pid){
 void scheduler::block_process_light(pid_t pid){
     thor_assert(pid < scheduler::MAX_PROCESS, "pid out of bounds");
 
-    logging::logf(logging::log_level::DEBUG, "scheduler: Block process (light) %u\n", pid);
+    verbose_logf(logging::log_level::DEBUG, "scheduler: Block process (light) %u\n", pid);
 
     pcb[pid].state = process_state::BLOCKED;
 }
@@ -833,7 +923,7 @@ void scheduler::block_process_light(pid_t pid){
 void scheduler::block_process_timeout_light(pid_t pid, size_t ms){
     thor_assert(pid < scheduler::MAX_PROCESS, "pid out of bounds");
 
-    logging::logf(logging::log_level::DEBUG, "scheduler: Block process (light) %u with timeout %u\n", pid, ms);
+    verbose_logf(logging::log_level::DEBUG, "scheduler: Block process (light) %u with timeout %u\n", pid, ms);
 
     // Compute the amount of ticks to sleep
     auto sleep_ticks = ms * (timer::timer_frequency() / 1000);
@@ -850,7 +940,7 @@ void scheduler::block_process(pid_t pid){
     thor_assert(pid < scheduler::MAX_PROCESS, "pid out of bounds");
     thor_assert(pid != idle_pid, "No reason to block the idle task");
 
-    logging::logf(logging::log_level::DEBUG, "scheduler: Block process %u\n", pid);
+    verbose_logf(logging::log_level::DEBUG, "scheduler: Block process %u\n", pid);
 
     pcb[pid].state = process_state::BLOCKED;
 
@@ -858,7 +948,7 @@ void scheduler::block_process(pid_t pid){
 }
 
 void scheduler::unblock_process(pid_t pid){
-    logging::logf(logging::log_level::DEBUG, "scheduler: Unblock process %u (%u)\n", pid, size_t(pcb[pid].state));
+    verbose_logf(logging::log_level::DEBUG, "scheduler: Unblock process %u (%u)\n", pid, size_t(pcb[pid].state));
 
     thor_assert(pid < scheduler::MAX_PROCESS, "pid out of bounds");
     thor_assert(pid != idle_pid, "No reason to unblock the idle task");
@@ -869,13 +959,17 @@ void scheduler::unblock_process(pid_t pid){
 }
 
 void scheduler::unblock_process_hint(pid_t pid){
-    logging::logf(logging::log_level::DEBUG, "scheduler: Unblock process (hint) %u (%u)\n", pid, size_t(pcb[pid].state));
+    verbose_logf(logging::log_level::DEBUG, "scheduler: Unblock process (hint) %u (%u)\n", pid, size_t(pcb[pid].state));
 
     thor_assert(pid < scheduler::MAX_PROCESS, "pid out of bounds");
     thor_assert(pid != idle_pid, "No reason to unblock the idle task");
     thor_assert(is_started(), "The scheduler is not started");
 
-    pcb[pid].state = process_state::READY;
+    auto state = pcb[pid].state;
+
+    if(state != process_state::RUNNING){
+        pcb[pid].state = process_state::READY;
+    }
 }
 
 void scheduler::sleep_ms(size_t time){
@@ -903,19 +997,47 @@ void scheduler::sleep_ms(pid_t pid, size_t time){
 size_t scheduler::register_new_handle(const path& p){
     pcb[current_pid].handles.push_back(p);
 
-    return pcb[current_pid].handles.size() - 1;
+    return pcb[current_pid].handles.size();
 }
 
 void scheduler::release_handle(size_t fd){
-    pcb[current_pid].handles[fd].invalidate();
+    pcb[current_pid].handles[fd - 1].invalidate();
 }
 
 bool scheduler::has_handle(size_t fd){
-    return fd < pcb[current_pid].handles.size() && pcb[current_pid].handles[fd].is_valid();
+    return fd > 0 && fd <= pcb[current_pid].handles.size() && pcb[current_pid].handles[fd - 1].is_valid();
 }
 
 const path& scheduler::get_handle(size_t fd){
-    return pcb[current_pid].handles[fd];
+    return pcb[current_pid].handles[fd - 1];
+}
+
+size_t scheduler::register_new_socket(network::socket_domain domain, network::socket_type type, network::socket_protocol protocol){
+    auto id = pcb[current_pid].sockets.size() + 1;
+
+    pcb[current_pid].sockets.emplace_back(id, domain, type, protocol, size_t(1), false);
+
+    return id;
+}
+
+void scheduler::release_socket(size_t fd){
+    pcb[current_pid].sockets[fd - 1].invalidate();
+}
+
+bool scheduler::has_socket(size_t fd){
+    return fd > 0 && fd - 1 < pcb[current_pid].sockets.size() && pcb[current_pid].sockets[fd - 1].is_valid();
+}
+
+network::socket& scheduler::get_socket(size_t fd){
+    return pcb[current_pid].sockets[fd - 1];
+}
+
+std::deque<network::socket>& scheduler::get_sockets(){
+    return pcb[current_pid].sockets;
+}
+
+std::deque<network::socket>& scheduler::get_sockets(scheduler::pid_t pid){
+    return pcb[pid].sockets;
 }
 
 const path& scheduler::get_working_directory(){

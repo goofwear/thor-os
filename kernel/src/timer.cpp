@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include "timer.hpp"
@@ -25,7 +25,6 @@ uint64_t _timer_frequency = 0;
 uint64_t (*_counter_fun)() = nullptr;
 uint64_t _counter_frequency = 0;
 
-//TODO The uptime in seconds with HPET is not correct
 std::string sysfs_uptime(){
     return std::to_string(timer::seconds());
 }

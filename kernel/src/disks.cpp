@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <unique_ptr.hpp>
@@ -11,7 +11,7 @@
 
 #include "disks.hpp"
 #include "thor.hpp"
-#include "console.hpp"
+#include "print.hpp"
 #include "logging.hpp"
 
 // The disks implementation

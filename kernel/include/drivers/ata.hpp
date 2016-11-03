@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef ATA_H
@@ -35,18 +35,18 @@ size_t read_sectors(drive_descriptor& drive, uint64_t start, uint8_t count, void
 size_t write_sectors(drive_descriptor& drive, uint64_t start, uint8_t count, const void* source, size_t& written);
 size_t clear_sectors(drive_descriptor& drive, uint64_t start, uint8_t count, size_t& written);
 
-struct ata_driver : devfs::dev_driver {
-    size_t read(void* data, char* buffer, size_t count, size_t offset, size_t& read);
-    size_t write(void* data, const char* buffer, size_t count, size_t offset, size_t& written);
-    size_t clear(void* data, size_t count, size_t offset, size_t& written);
-    size_t size(void* data);
+struct ata_driver final : devfs::dev_driver {
+    size_t read(void* data, char* buffer, size_t count, size_t offset, size_t& read) override;
+    size_t write(void* data, const char* buffer, size_t count, size_t offset, size_t& written) override;
+    size_t clear(void* data, size_t count, size_t offset, size_t& written) override;
+    size_t size(void* data) override;
 };
 
-struct ata_part_driver : devfs::dev_driver {
-    size_t read(void* data, char* buffer, size_t count, size_t offset, size_t& read);
-    size_t write(void* data, const char* buffer, size_t count, size_t offset, size_t& written);
-    size_t clear(void* data, size_t count, size_t offset, size_t& written);
-    size_t size(void* data);
+struct ata_part_driver final : devfs::dev_driver {
+    size_t read(void* data, char* buffer, size_t count, size_t offset, size_t& read) override;
+    size_t write(void* data, const char* buffer, size_t count, size_t offset, size_t& written) override;
+    size_t clear(void* data, size_t count, size_t offset, size_t& written) override;
+    size_t size(void* data) override;
 };
 
 } // end of namespace ata

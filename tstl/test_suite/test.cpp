@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <cstdio>
@@ -11,15 +11,29 @@
 #include "test.hpp"
 
 void string_tests();
+void function_tests();
+void tuple_tests();
+void vector_tests();
+void deque_tests();
+void expected_tests();
+void list_tests();
 void traits_tests();
 void algorithms_tests();
 void circular_buffer_tests();
+void shared_ptr_tests();
 
 int main(){
     string_tests();
     traits_tests();
     algorithms_tests();
     circular_buffer_tests();
+    tuple_tests();
+    vector_tests();
+    deque_tests();
+    expected_tests();
+    shared_ptr_tests();
+    list_tests();
+    function_tests();
 
     printf("All tests finished\n");
 

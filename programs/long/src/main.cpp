@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <tlib/print.hpp>
@@ -20,14 +20,14 @@ uint64_t fibonacci_slow(uint64_t s){
 int main(){
     uint64_t i = 0;
 
-    print_line("START");
+    tlib::print_line("START");
 
     while(i < 10){
-        print_line(fibonacci_slow(current));
+        tlib::print_line(fibonacci_slow(current));
         ++i;
     }
 
-    print_line("END");
+    tlib::print_line("END");
 
     return 0;
 }

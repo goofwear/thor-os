@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef IO_HPP
@@ -12,7 +12,14 @@
 #include <expected.hpp>
 
 #include "tlib/ioctl_codes.hpp"
+#include "tlib/config.hpp"
 
-int64_t ioctl(size_t device, ioctl_request request, void* data);
+ASSERT_ONLY_THOR_PROGRAM
+
+namespace tlib {
+
+int64_t ioctl(size_t device, tlib::ioctl_request request, void* data);
+
+} //end of namespace tlib
 
 #endif

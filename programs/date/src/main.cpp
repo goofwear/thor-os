@@ -1,27 +1,27 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <tlib/print.hpp>
 #include <tlib/system.hpp>
 
 int main(int, char*[]){
-    auto date = local_date();
+    auto date = tlib::local_date();
 
-    print(date.day);
-    print('.');
-    print(date.month);
-    print('.');
-    print(date.year);
-    print(' ');
+    tlib::print(date.day);
+    tlib::print('.');
+    tlib::print(date.month);
+    tlib::print('.');
+    tlib::print(date.year);
+    tlib::print(' ');
 
-    print(date.hour);
-    print(':');
-    print(date.minutes);
-    print_line();
+    tlib::print(date.hour);
+    tlib::print(':');
+    tlib::print(date.minutes);
+    tlib::print_line();
 
     return 0;
 }

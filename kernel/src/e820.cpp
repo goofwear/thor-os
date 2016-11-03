@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include "e820.hpp"
@@ -20,7 +20,7 @@ size_t e820_entries = 0;
 void e820::finalize_memory_detection(){
     e820_entries = early::e820_entry_count();
 
-    auto t = mmap_entry_count();;
+    auto t = mmap_entry_count();
 
     auto* smap = reinterpret_cast<e820::bios_e820_entry*>(early::e820_entry_address);
 

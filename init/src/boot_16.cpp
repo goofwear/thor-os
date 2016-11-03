@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #define CODE_16
@@ -289,7 +289,7 @@ void setup_idt(){
 gdt::gdt_descriptor_t null_descriptor(){
     gdt::gdt_descriptor_t descriptor;
 
-    //zero-out the descriptor;
+    //zero-out the descriptor
     *(reinterpret_cast<uint64_t*>(&descriptor)) = 0;
 
     return descriptor;

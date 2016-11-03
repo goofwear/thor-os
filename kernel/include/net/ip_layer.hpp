@@ -1,69 +1,146 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef NET_IP_LAYER_H
 #define NET_IP_LAYER_H
 
 #include <types.hpp>
+#include <expected.hpp>
 
-#include "network.hpp"
+#include "tlib/net_constants.hpp"
+
+#include "net/interface.hpp"
+#include "net/packet.hpp"
 
 namespace network {
 
-namespace ip {
-
-//TODO Maybe packed 4x8 is better
-
-struct address {
-    uint32_t raw_address = 0;
-
-    address(){}
-    address(uint32_t raw) : raw_address(raw) {}
-
-    uint8_t operator()(size_t index) const {
-        return (raw_address >> ((3 - index) * 8)) & 0xFF;
-    }
-
-    void set_sub(size_t index, uint8_t value){
-        raw_address |= uint32_t(value) << ((3 - index) * 8);
-    }
-
-    bool operator==(const address& rhs) const {
-        return this->raw_address == rhs.raw_address;
-    }
-};
-
-inline address make_address(uint8_t a, uint8_t b, uint8_t c, uint8_t d){
-    address addr;
-    addr.set_sub(0, a);
-    addr.set_sub(1, b);
-    addr.set_sub(2, c);
-    addr.set_sub(3, d);
-    return addr;
+namespace ethernet {
+struct layer;
 }
 
+namespace arp {
+struct layer;
+}
+
+namespace icmp {
+struct layer;
+}
+
+namespace udp {
+struct layer;
+}
+
+namespace tcp {
+struct layer;
+}
+
+namespace ip {
+
+/*!
+ * \brief Convert a raw 32bit address to the abstract representation
+ */
 address ip32_to_ip(uint32_t raw);
 
-struct header {
-    uint8_t version_ihl;
-    uint8_t dscp_ecn;
-    uint16_t total_len;
-    uint16_t identification;
-    uint16_t flags_offset;
-    uint8_t ttl;
-    uint8_t protocol;
-    uint16_t header_checksum;
-    uint32_t source_ip;
-    uint32_t target_ip;
-} __attribute__((packed));
+/*!
+ * \brief Convert the abstract IP address to a raw 32bit address
+ */
+uint32_t ip_to_ip32(address ip);
+
+/*!
+ * \brief Returns the string representation of the given IP
+ */
+std::string ip_to_str(address ip);
+
+/*!
+ * \brief Test if two IP addresses are in the same network
+ */
+bool same_network(address ip, address test);
 
 static_assert(sizeof(header) == 20, "The size of an IPv4 header must be 20 bytes");
 
-void decode(network::interface_descriptor& interface, network::ethernet::packet& packet);
+/*!
+ * \brief The IP layer implementation
+ */
+struct layer {
+    /*!
+     * \brief Constructs the layer
+     * \param parent The parent layer
+     */
+    layer(network::ethernet::layer* parent);
+
+    /*!
+     * \brief Decode a network packet.
+     *
+     * This must only be called from the ethernet layer.
+     *
+     * \param interface The interface on which the packet was received
+     * \param packet The packet to decode
+     */
+    void decode(network::interface_descriptor& interface, network::packet_p& packet);
+
+    /*!
+     * \brief Prepare a packet for the kernel
+     * \param interface The interface on which to prepare the packet for
+     * \param descriptor The packet descriptor
+     * \return the prepared packet or an error
+     */
+    std::expected<network::packet_p> kernel_prepare_packet(network::interface_descriptor& interface, const packet_descriptor& desc);
+
+    /*!
+     * \brief Prepare a packet for the user
+     * \param buffer The buffer to write the packet to
+     * \param interface The interface on which to prepare the packet for
+     * \param descriptor The packet descriptor
+     * \return the prepared packet or an error
+     */
+    std::expected<network::packet_p> user_prepare_packet(char* buffer, network::interface_descriptor& interface, const packet_descriptor* desc);
+
+    /*!
+     * \brief Finalize a prepared packet
+     * \param interface The interface on which to finalize the packet
+     * \param p The packet to finalize
+     * \return nothing or an error
+     */
+    std::expected<void> finalize_packet(network::interface_descriptor& interface, network::packet_p& p);
+
+    /*!
+     * \brief Register the ICMP layer
+     * \param layer The ICMP layer
+     */
+    void register_icmp_layer(network::icmp::layer* layer);
+
+    /*!
+     * \brief Register the ARP layer
+     * \param layer The ARP layer
+     */
+    void register_arp_layer(network::arp::layer* layer);
+
+    /*!
+     * \brief Register the UDP layer
+     * \param layer The UDP layer
+     */
+    void register_udp_layer(network::udp::layer* layer);
+
+    /*!
+     * \brief Register the TCP layer
+     * \param layer The TCP layer
+     */
+    void register_tcp_layer(network::tcp::layer* layer);
+
+private:
+    std::expected<uint64_t> get_target_mac(network::interface_descriptor& interface, network::ip::address target_ip);
+
+    network::ethernet::layer* parent;  ///< The parent layer
+
+    network::icmp::layer* icmp_layer; ///< The ICMP layer
+    network::arp::layer* arp_layer; ///< The ARP layer
+    network::udp::layer* udp_layer; ///< The UDP layer
+    network::tcp::layer* tcp_layer; ///< The TCP layer
+};
 
 } // end of ip namespace
 

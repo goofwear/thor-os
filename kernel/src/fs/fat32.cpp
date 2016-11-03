@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <types.hpp>
@@ -186,7 +186,7 @@ void fat32::fat32_file_system::init(){
     std::unique_ptr<fat_bs_t> fat_bs_tmp(new fat_bs_t());
 
     if(read_sectors(0, 1, fat_bs_tmp.get())){
-        fat_bs = fat_bs_tmp.release();
+        fat_bs = fat_bs_tmp.unlock();
 
         //TODO fat_bs->signature should be 0xAA55
         //TODO fat_bs->file_system_type should be FAT32
@@ -199,7 +199,7 @@ void fat32::fat32_file_system::init(){
     std::unique_ptr<fat_is_t> fat_is_tmp(new fat_is_t());
 
     if(read_sectors(fs_information_sector, 1, fat_is_tmp.get())){
-        fat_is = fat_is_tmp.release();
+        fat_is = fat_is_tmp.unlock();
 
         //TODO fat_is->signature_start should be 0x52 0x52 0x61 0x41
         //TODO fat_is->signature_middle should be 0x72 0x72 0x41 0x61
@@ -297,6 +297,10 @@ size_t fat32::fat32_file_system::read(const path& file_path, char* buffer, size_
     read = last - first;
 
     return 0;
+}
+
+size_t fat32::fat32_file_system::read(const path& /*file_path*/, char* /*buffer*/, size_t /*count*/, size_t /*offset*/, size_t& /*read*/, size_t /*ms*/){
+    return std::ERROR_UNSUPPORTED;
 }
 
 size_t fat32::fat32_file_system::write(const path& file_path, const char* buffer, size_t count, size_t offset, size_t& written){
@@ -409,8 +413,8 @@ size_t fat32::fat32_file_system::clear(const path& file_path, size_t count, size
     size_t last = offset + count;
 
     size_t read_bytes = 0;
-    size_t position = 0;
     size_t cluster = 0;
+    bool first_position = true;
 
     size_t cluster_size = 512 * fat_bs->sectors_per_cluster;
 
@@ -423,8 +427,9 @@ size_t fat32::fat32_file_system::clear(const path& file_path, size_t count, size
             if(read_sectors(cluster_lba(cluster_number), fat_bs->sectors_per_cluster, cluster.get())){
                 size_t i = 0;
 
-                if(position == 0){
+                if(first_position){
                     i = first % cluster_size;
+                    first_position = false;
                 }
 
                 for(; i < cluster_size && read_bytes < last; ++i, ++read_bytes){
@@ -703,7 +708,7 @@ size_t fat32::fat32_file_system::rm(const path& file_path){
     }
 }
 
-size_t fat32::fat32_file_system::statfs(statfs_info& file){
+size_t fat32::fat32_file_system::statfs(vfs::statfs_info& file){
     file.total_size = fat_bs->total_sectors_long * 512;
     file.free_size = fat_is->free_clusters * fat_bs->sectors_per_cluster * 512;
 
@@ -955,9 +960,7 @@ fat32::cluster_entry* fat32::fat32_file_system::find_free_entry(std::unique_heap
         //remove the end of directory markers
         if(end_found){
             //Remove all the end of directory marker in the cluster
-            for(size_t i = 0; i < directory_cluster.size(); ++i){
-                auto& entry = directory_cluster[i];
-
+            for(auto& entry : directory_cluster){
                 if(end_of_directory(entry)){
                     entry.name[0] = 0xE5;
                 }
@@ -1018,9 +1021,7 @@ fat32::cluster_entry* fat32::fat32_file_system::extend_directory(std::unique_hea
     }
 
     //Remove all the end of directory marker in the previous cluster
-    for(size_t i = 0; i < directory_cluster.size(); ++i){
-        auto& entry = directory_cluster[i];
-
+    for(auto& entry : directory_cluster){
         if(end_of_directory(entry)){
             entry.name[0] = 0xE5;
         }
@@ -1367,10 +1368,10 @@ uint32_t fat32::fat32_file_system::find_free_cluster(){
 
 bool fat32::fat32_file_system::read_sectors(uint64_t start, uint8_t count, void* destination){
     auto result = vfs::direct_read(device, reinterpret_cast<char*>(destination), count * 512, start * 512);
-    return result > 0 && result == count * 512;
+    return result && *result == count * 512;
 }
 
 bool fat32::fat32_file_system::write_sectors(uint64_t start, uint8_t count, void* source){
     auto result = vfs::direct_write(device, reinterpret_cast<const char*>(source), count * 512, start * 512);
-    return result > 0 && result == count * 512;
+    return result && *result == count * 512;
 }

@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include "kernel.hpp"
@@ -22,8 +22,9 @@
 #include "arch.hpp"
 #include "vesa.hpp"
 #include "console.hpp"
+#include "print.hpp"
 #include "gdt.hpp"
-#include "terminal.hpp"
+#include "stdio.hpp"
 #include "scheduler.hpp"
 #include "logging.hpp"
 #include "net/network.hpp"
@@ -91,7 +92,7 @@ void kernel_main(){
         suspend_boot();
     }
 
-    init_console();
+    stdio::init_console();
     stdio::init_terminals();
 
     //Finalize memory operations (register sysfs values)
@@ -111,12 +112,10 @@ void kernel_main(){
     disks::detect_disks();
     pci::detect_devices();
     network::init();
+    stdio::register_devices();
 
     //Init the virtual file system
     vfs::init();
-
-    //Starting from here, the logging system can output logs to file
-    //TODO logging::to_file();
 
     //Only install system calls when everything else is ready
     install_system_calls();

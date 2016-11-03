@@ -1,8 +1,8 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include <types.hpp>
@@ -64,13 +64,13 @@ void procfs::set_pcb(const scheduler::process_control_t* pcb_ptr){
 
 procfs::procfs_file_system::procfs_file_system(path mp) : mount_point(mp) {
     standard_contents.reserve(7);
-    standard_contents.emplace_back("pid", false, false, false, 0);
-    standard_contents.emplace_back("ppid", false, false, false, 0);
-    standard_contents.emplace_back("state", false, false, false, 0);
-    standard_contents.emplace_back("system", false, false, false, 0);
-    standard_contents.emplace_back("priority", false, false, false, 0);
-    standard_contents.emplace_back("name", false, false, false, 0);
-    standard_contents.emplace_back("memory", false, false, false, 0);
+    standard_contents.emplace_back("pid", false, false, false, 0UL);
+    standard_contents.emplace_back("ppid", false, false, false, 0UL);
+    standard_contents.emplace_back("state", false, false, false, 0UL);
+    standard_contents.emplace_back("system", false, false, false, 0UL);
+    standard_contents.emplace_back("priority", false, false, false, 0UL);
+    standard_contents.emplace_back("name", false, false, false, 0UL);
+    standard_contents.emplace_back("memory", false, false, false, 0UL);
 }
 
 procfs::procfs_file_system::~procfs_file_system(){
@@ -165,6 +165,10 @@ size_t procfs::procfs_file_system::read(const path& file_path, char* buffer, siz
     return std::ERROR_NOT_EXISTS;
 }
 
+size_t procfs::procfs_file_system::read(const path& /*file_path*/, char* /*buffer*/, size_t /*count*/, size_t /*offset*/, size_t& /*read*/, size_t /*ms*/){
+    return std::ERROR_UNSUPPORTED;
+}
+
 size_t procfs::procfs_file_system::ls(const path& file_path, std::vector<vfs::file>& contents){
     if(file_path.is_root()){
         for(size_t i = 0; i < scheduler::MAX_PROCESS; ++i){
@@ -193,7 +197,7 @@ size_t procfs::procfs_file_system::ls(const path& file_path, std::vector<vfs::fi
     return std::ERROR_NOT_EXISTS;
 }
 
-size_t procfs::procfs_file_system::statfs(statfs_info& file){
+size_t procfs::procfs_file_system::statfs(vfs::statfs_info& file){
     file.total_size = 0;
     file.free_size = 0;
 

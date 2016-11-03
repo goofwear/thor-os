@@ -1,15 +1,15 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #include "thor.hpp"
 #include "kalloc.hpp"
 #include "scheduler.hpp"
 #include "logging.hpp"
-#include "console.hpp"
+#include "print.hpp"
 
 void* operator new(uint64_t size){
     return kalloc::k_malloc(size);

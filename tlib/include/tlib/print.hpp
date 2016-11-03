@@ -1,14 +1,16 @@
 //=======================================================================
 // Copyright Baptiste Wicht 2013-2016.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+// Distributed under the terms of the MIT License.
+// (See accompanying file LICENSE or copy at
+//  http://www.opensource.org/licenses/MIT)
 //=======================================================================
 
 #ifndef USER_PRINT_HPP
 #define USER_PRINT_HPP
 
-//TODO Rename in console
+#include "tlib/config.hpp"
+
+ASSERT_ONLY_THOR_PROGRAM
 
 #include <stdarg.h>
 
@@ -16,6 +18,8 @@
 #include <string.hpp>
 
 #include <tlib/keycode.hpp>
+
+namespace tlib {
 
 void print(char c);
 void print(const char* s);
@@ -42,8 +46,8 @@ void set_mouse(bool m);
 size_t read_input(char* buffer, size_t max);
 size_t read_input(char* buffer, size_t max, size_t ms);
 
-keycode read_input_raw();
-keycode read_input_raw(size_t ms);
+std::keycode read_input_raw();
+std::keycode read_input_raw(size_t ms);
 
 void clear();
 
@@ -53,5 +57,7 @@ size_t get_rows();
 #include "printf_dec.hpp"
 
 void user_logf(const char* s, ...);
+
+} //end of namespace tlib
 
 #endif
